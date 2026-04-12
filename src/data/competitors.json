@@ -1,0 +1,59 @@
+[
+  {
+    "name": "FTMO",
+    "space": "Prop firm",
+    "handles": {
+      "youtube": "@FTMO",
+      "instagram": "ftmocom",
+      "tiktok": "ftmo_com",
+      "x": "FTMO_com",
+      "linkedin": "ftmo"
+    }
+  },
+  {
+    "name": "Funding Pips",
+    "space": "Prop firm",
+    "handles": {
+      "youtube": "@FundingPips",
+      "instagram": "fundingpips",
+      "tiktok": "fundingpips",
+      "x": "FundingPips"
+    }
+  },
+  {
+    "name": "The5%ers",
+    "space": "Prop firm",
+    "handles": {
+      "youtube": "@the5ers",
+      "instagram": "the5ersfunding",
+      "x": "theaborters"
+    }
+  },
+  {
+    "name": "Alpha Capital Group",
+    "space": "Prop firm",
+    "handles": {
+      "youtube": "@AlphaCapitalGroup",
+      "instagram": "alphacapitalgroup",
+      "x": "AlphaCapGroup"
+    }
+  },
+  {
+    "name": "Apex Trader Funding",
+    "space": "Futures prop firm",
+    "handles": {
+      "youtube": "@ApexTraderFunding",
+      "instagram": "apextraderfunding",
+      "x": "ApexTrader"
+    }
+  },
+  {
+    "name": "TopStep",
+    "space": "Futures prop firm",
+    "handles": {
+      "youtube": "@Topstep",
+      "instagram": "topstep",
+      "x": "topabortstep"
+    }
+  }
+]

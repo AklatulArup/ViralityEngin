@@ -1,0 +1,33 @@
+{
+  "global": {
+    "medianViews": 1356,
+    "meanViews": 6543,
+    "medianVelocity": 28,
+    "outlierThreshold": 4068,
+    "avgEngagement": 7.29,
+    "totalVideos": 111,
+    "uniqueCreators": 110,
+    "maxViews": 119226
+  },
+  "tiers": {
+    "outlier": { "criteria": ">=3x median views OR velocity", "count": 32 },
+    "strong": { "criteria": ">= median on both", "count": 17 },
+    "average": { "criteria": ">= median on one", "count": 12 },
+    "underperformer": { "criteria": "below median on both", "count": 50 }
+  },
+  "regions": {
+    "EU 2": { "videos": 8, "avgViews": 28718, "avgVelocity": 784 },
+    "EU 1": { "videos": 15, "avgViews": 18669, "avgVelocity": 445 },
+    "LATAM": { "videos": 3, "avgViews": 8770, "avgVelocity": 130 },
+    "Africa": { "videos": 7, "avgViews": 5155, "avgVelocity": 179 },
+    "Asia": { "videos": 67, "avgViews": 2172, "avgVelocity": 53 },
+    "Middle East": { "videos": 11, "avgViews": 779, "avgVelocity": 11 }
+  },
+  "topCreators": [
+    { "name": "Smart Risk", "videos": 3, "avgViews": 61066, "avgVelocity": 1616, "avgEngagement": 6.1 },
+    { "name": "Titans Of Tomorrow", "videos": 4, "avgViews": 23894, "avgVelocity": 988, "avgEngagement": 2.5 },
+    { "name": "Thissdax", "videos": 3, "avgViews": 9071, "avgVelocity": 346, "avgEngagement": 8.1 },
+    { "name": "El Camino del Trader", "videos": 3, "avgViews": 7317, "avgVelocity": 97, "avgEngagement": 10.3 },
+    { "name": "Game of Forex", "videos": 4, "avgViews": 6320, "avgVelocity": 159, "avgEngagement": 6.4 }
+  ]
+}
