@@ -7,6 +7,7 @@ import CollapsibleSection from "./CollapsibleSection";
 interface ReferencePoolBuilderProps {
   bank: KeywordBank;
   onComplete: (added: number) => void;
+  onBatchSaved?: () => void;
 }
 
 const LANGUAGES = [
@@ -29,7 +30,7 @@ const LANGUAGES = [
 
 type ParamCategory = "competitors" | "keywords" | "hashtags";
 
-export default function ReferencePoolBuilder({ bank, onComplete }: ReferencePoolBuilderProps) {
+export default function ReferencePoolBuilder({ bank, onComplete, onBatchSaved }: ReferencePoolBuilderProps) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [result, setResult] = useState<{ searched: number; uniqueVideos: number; added: number; skipped: number } | null>(null);
@@ -159,6 +160,7 @@ export default function ReferencePoolBuilder({ bank, onComplete }: ReferencePool
           const storeData = await storeRes.json();
           added += storeData.added || 0;
           updated += storeData.updated || 0;
+          onBatchSaved?.();
         }
         setStatus(`Adding... ${Math.min(i + batchSize, entries.length)}/${entries.length}`);
       }

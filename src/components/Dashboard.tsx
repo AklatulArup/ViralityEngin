@@ -165,7 +165,14 @@ export default function Dashboard() {
   const refreshReferenceStore = () => {
     fetch("/api/reference-store")
       .then((r) => r.json())
-      .then((store: ReferenceStore) => setReferenceStore(store))
+      .then((store: ReferenceStore) => {
+        setReferenceStore(store);
+      })
+      .catch(() => {});
+    // Also refresh keyword bank since pool expansions can add new keywords
+    fetch("/api/keyword-bank")
+      .then((r) => r.json())
+      .then((bank: KeywordBank) => setKeywordBank(bank))
       .catch(() => {});
   };
 
@@ -1130,7 +1137,8 @@ export default function Dashboard() {
               {keywordBank && (
                 <ReferencePoolBuilder
                   bank={keywordBank}
-                  onComplete={(added) => { if (added > 0) { setRefStoreStatus("saved"); refreshReferenceStore(); } }}
+                  onComplete={() => { setRefStoreStatus("saved"); refreshReferenceStore(); }}
+                  onBatchSaved={() => refreshReferenceStore()}
                 />
               )}
             </div>
