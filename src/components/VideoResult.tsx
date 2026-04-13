@@ -19,30 +19,22 @@ import type {
   CompetitorGapMatrix,
   TagCorrelationResult,
   UploadCadenceResult,
-  HookPatternLibrary,
 } from "@/lib/types";
 import { formatNumber, formatDate } from "@/lib/formatters";
 import { detectArchetypes, getArchetype } from "@/lib/archetypes";
 import MetricCard from "./MetricCard";
-import ClaudePrompt from "./ClaudePrompt";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import CollapsibleSection from "./CollapsibleSection";
 import AlgorithmIntelPanel from "./AlgorithmIntelPanel";
 import AdjacentVideos from "./AdjacentVideos";
 import NicheRankingPanel from "./NicheRankingPanel";
 import LanguageCPAPanel from "./LanguageCPAPanel";
-import TitleScoringPanel from "./TitleScoringPanel";
 import DescriptionSEOPanel from "./DescriptionSEOPanel";
 import EngagementDecayPanel from "./EngagementDecayPanel";
 import ThumbnailPanel from "./ThumbnailPanel";
-import CrossPromotionPanel from "./CrossPromotionPanel";
-import PublishTimePanel from "./PublishTimePanel";
 import CompetitorGapPanel from "./CompetitorGapPanel";
 import TagCorrelationPanel from "./TagCorrelationPanel";
 import UploadCadencePanel from "./UploadCadencePanel";
-import HookPatternPanel from "./HookPatternPanel";
-import SentimentPanel from "./SentimentPanel";
-import type { TitleSentimentAnalysis } from "@/lib/sentiment";
 
 interface VideoResultProps {
   video: EnrichedVideo;
@@ -66,8 +58,6 @@ interface VideoResultProps {
   competitorGap?: CompetitorGapMatrix | null;
   tagCorrelation?: TagCorrelationResult | null;
   uploadCadence?: UploadCadenceResult | null;
-  hookPatterns?: HookPatternLibrary | null;
-  sentimentAnalysis?: TitleSentimentAnalysis | null;
 }
 
 export default function VideoResult({
@@ -92,8 +82,6 @@ export default function VideoResult({
   competitorGap,
   tagCorrelation,
   uploadCadence,
-  hookPatterns,
-  sentimentAnalysis,
 }: VideoResultProps) {
   const archetypes = detectArchetypes(video.title, video.tags);
 
@@ -275,11 +263,6 @@ export default function VideoResult({
 
       {/* ── Video-Level Analysis Panels ── */}
 
-      {/* Title A/B Scoring */}
-      {keywordBank && (
-        <TitleScoringPanel currentTitle={video.title} bank={keywordBank} />
-      )}
-
       {/* Description SEO */}
       {descriptionSEO && <DescriptionSEOPanel seo={descriptionSEO} />}
 
@@ -291,15 +274,7 @@ export default function VideoResult({
       {/* Thumbnail Metadata */}
       {thumbnailAnalysis && <ThumbnailPanel analysis={thumbnailAnalysis} />}
 
-      {/* Cross-Promotion */}
-      {crossPromotion && <CrossPromotionPanel promo={crossPromotion} />}
-
       {/* ── Reference Pool Aggregate Panels ── */}
-
-      {/* Publish Time Heatmap */}
-      {publishTimeHeatmap && publishTimeHeatmap.totalVideosAnalyzed >= 3 && (
-        <PublishTimePanel heatmap={publishTimeHeatmap} />
-      )}
 
       {/* Competitor Gap */}
       {competitorGap && competitorGap.competitors.length > 0 && (
@@ -314,16 +289,6 @@ export default function VideoResult({
       {/* Upload Cadence */}
       {uploadCadence && uploadCadence.entries.length > 0 && (
         <UploadCadencePanel cadence={uploadCadence} />
-      )}
-
-      {/* Hook Pattern Library */}
-      {hookPatterns && hookPatterns.patterns.length > 0 && (
-        <HookPatternPanel library={hookPatterns} />
-      )}
-
-      {/* Content Sentiment */}
-      {sentimentAnalysis && sentimentAnalysis.firmSentiment.length > 0 && (
-        <SentimentPanel analysis={sentimentAnalysis} />
       )}
 
       {/* Reference Context */}
@@ -343,19 +308,6 @@ export default function VideoResult({
         </div>
       )}
 
-      {/* Claude prompt */}
-      <ClaudePrompt
-        url={url}
-        activeModes={activeModes}
-        channelName={channel?.name || video.channel}
-        channelSubs={channel?.subs || 0}
-        channelMedian={channelMedian}
-        videoViews={video.views}
-        videoVelocity={video.velocity}
-        videoEngagement={video.engagement}
-        isOutlier={video.isOutlier}
-        vrsScore={video.vrs.estimatedFullScore}
-      />
     </div>
   );
 }

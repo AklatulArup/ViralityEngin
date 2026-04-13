@@ -23,7 +23,6 @@ import type {
   CompetitorGapMatrix,
   TagCorrelationResult,
   UploadCadenceResult,
-  HookPatternLibrary,
 } from "@/lib/types";
 import { MODES } from "@/lib/modes";
 import { parseInput } from "@/lib/url-parser";
@@ -59,7 +58,6 @@ import { computePublishTimeHeatmap } from "@/lib/publish-time";
 import { computeCompetitorGapMatrix } from "@/lib/competitor-gap";
 import { computeTagCorrelation } from "@/lib/tag-correlation";
 import { computeUploadCadence } from "@/lib/upload-cadence";
-import { analyzeHookPatterns } from "@/lib/hook-patterns";
 import ModeSelector from "./ModeSelector";
 import UrlInput from "./UrlInput";
 import VideoResult from "./VideoResult";
@@ -69,16 +67,12 @@ import TikTokBatchResult from "./TikTokBatchResult";
 import ReferenceSearch from "./ReferenceSearch";
 import ReferenceUpload from "./ReferenceUpload";
 import ReferencePoolBuilder from "./ReferencePoolBuilder";
-import BulkImporter from "./BulkImporter";
 import KeywordBankManager from "./KeywordBankManager";
 import HashtagBankManager from "./HashtagBankManager";
 import CompetitorBankManager from "./CompetitorBankManager";
 import type { Competitor } from "./CompetitorBankManager";
 import CreatorBlocklist from "./CreatorBlocklist";
-import TrendsPanel from "./TrendsPanel";
-import SentimentPanel from "./SentimentPanel";
 import ViewForecastPanel from "./ViewForecastPanel";
-import { analyzePoolSentiment, type TitleSentimentAnalysis } from "@/lib/sentiment";
 
 type InputTab = "youtube" | "tiktok" | "instagram";
 
@@ -143,8 +137,6 @@ export default function Dashboard() {
   const [competitorGap, setCompetitorGap] = useState<CompetitorGapMatrix | null>(null);
   const [tagCorrelation, setTagCorrelation] = useState<TagCorrelationResult | null>(null);
   const [uploadCadence, setUploadCadence] = useState<UploadCadenceResult | null>(null);
-  const [hookPatterns, setHookPatterns] = useState<HookPatternLibrary | null>(null);
-  const [sentimentAnalysis, setSentimentAnalysis] = useState<TitleSentimentAnalysis | null>(null);
 
   // Load reference store and keyword bank on mount
   useEffect(() => {
@@ -213,7 +205,6 @@ export default function Dashboard() {
     setCompetitorGap(null);
     setTagCorrelation(null);
     setUploadCadence(null);
-    setHookPatterns(null);
     setStatus("Uploading CSV...");
 
     try {
@@ -334,7 +325,6 @@ export default function Dashboard() {
     setCompetitorGap(null);
     setTagCorrelation(null);
     setUploadCadence(null);
-    setHookPatterns(null);
     setLastUrl(url);
 
     try {
@@ -570,11 +560,6 @@ export default function Dashboard() {
           setPublishTime(computePublishTimeHeatmap(referenceStore.entries));
           setTagCorrelation(computeTagCorrelation(referenceStore.entries));
           setUploadCadence(computeUploadCadence(referenceStore.entries));
-          setHookPatterns(analyzeHookPatterns(referenceStore.entries));
-          setSentimentAnalysis(analyzePoolSentiment(
-            referenceStore.entries,
-            keywordBank?.categories.competitors || []
-          ));
           if (keywordBank) {
             setCompetitorGap(computeCompetitorGapMatrix(
               "fundednext",
@@ -852,13 +837,6 @@ export default function Dashboard() {
             style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
           >
             <UrlInput onAnalyze={analyze} loading={loading} status={status} error={error} />
-            <div
-              className="px-4 py-3 flex items-center gap-3"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
-            >
-              <span className="text-[11px]" style={{ color: "#86868b" }}>or bulk import via CSV</span>
-              <BulkImporter onComplete={(added) => { if (added > 0) { setRefStoreStatus("saved"); refreshReferenceStore(); } }} />
-            </div>
           </div>
         )}
 
@@ -1093,8 +1071,6 @@ export default function Dashboard() {
             competitorGap={competitorGap}
             tagCorrelation={tagCorrelation}
             uploadCadence={uploadCadence}
-            hookPatterns={hookPatterns}
-            sentimentAnalysis={sentimentAnalysis}
           />
         )}
 
@@ -1111,22 +1087,9 @@ export default function Dashboard() {
           <TikTokBatchResult result={result} activeModes={activeModes} />
         )}
 
-        {/* ── Bulk Importer: CSV / URL dump + auto-discography ── */}
-        <div className="mt-6">
-          <BulkImporter
-            onComplete={(added) => {
-              if (added > 0) {
-                setRefStoreStatus("saved");
-                refreshReferenceStore();
-              }
-            }}
-          />
-        </div>
-
         {/* ── Intelligence Tools ── */}
         {keywordBank && (
           <div className="mt-3.5 space-y-3.5">
-            <TrendsPanel bank={keywordBank} />
             <ReferencePoolBuilder
               bank={keywordBank}
               onComplete={(added) => {
