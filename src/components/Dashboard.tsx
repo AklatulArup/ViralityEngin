@@ -71,12 +71,16 @@ import ReferenceUpload from "./ReferenceUpload";
 import ReferencePoolBuilder from "./ReferencePoolBuilder";
 import BulkImporter from "./BulkImporter";
 import KeywordBankManager from "./KeywordBankManager";
+import HashtagBankManager from "./HashtagBankManager";
+import CompetitorBankManager from "./CompetitorBankManager";
+import type { Competitor } from "./CompetitorBankManager";
 import CreatorBlocklist from "./CreatorBlocklist";
 import TrendsPanel from "./TrendsPanel";
 import SentimentPanel from "./SentimentPanel";
+import ViewForecastPanel from "./ViewForecastPanel";
 import { analyzePoolSentiment, type TitleSentimentAnalysis } from "@/lib/sentiment";
 
-type InputTab = "youtube" | "tiktok";
+type InputTab = "youtube" | "tiktok" | "instagram";
 
 function enrichVideo(
   v: VideoData,
@@ -115,6 +119,15 @@ export default function Dashboard() {
   } | null>(null);
   const [keywordBank, setKeywordBank] = useState<KeywordBank | null>(null);
   const [blocklistKey, setBlocklistKey] = useState(0);
+  const [hashtagBank, setHashtagBank] = useState<{
+    version: number;
+    lastUpdated: string;
+    categories: { viral: string[]; brand: string[]; niche: string[]; campaign: string[] };
+  } | null>(null);
+  const [competitors, setCompetitors] = useState<Competitor[]>([]);
+  const [forecastDate, setForecastDate] = useState<string>("");
+  const [instagramInput, setInstagramInput] = useState("");
+  const [instagramStatus, setInstagramStatus] = useState("");
 
   // Extra analysis results for video mode
   const [adjacentCtx, setAdjacentCtx] = useState<AdjacentVideoContext | null>(null);
@@ -142,6 +155,14 @@ export default function Dashboard() {
     fetch("/api/keyword-bank")
       .then((r) => r.json())
       .then((bank: KeywordBank) => setKeywordBank(bank))
+      .catch(() => {});
+    fetch("/api/hashtag-bank")
+      .then((r) => r.json())
+      .then(setHashtagBank)
+      .catch(() => {});
+    fetch("/api/competitor-bank")
+      .then((r) => r.json())
+      .then(setCompetitors)
       .catch(() => {});
   }, []);
 
@@ -608,118 +629,306 @@ export default function Dashboard() {
     setLoading(false);
   };
 
+  // ─── Instagram Save Handler ───
+  const saveInstagram = async (inputs: string[]) => {
+    const filtered = inputs.map((s) => s.trim()).filter(Boolean);
+    if (filtered.length === 0) return;
+    setInstagramStatus("Saving...");
+    try {
+      const res = await fetch("/api/instagram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inputs: filtered }),
+      });
+      const data = await res.json();
+      setInstagramStatus(`Saved ${data.added} new · ${data.total} total queued`);
+      setInstagramInput("");
+    } catch {
+      setInstagramStatus("Failed to save");
+    }
+    setTimeout(() => setInstagramStatus(""), 3000);
+  };
+
   return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border">
-        <div
-          className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-xs font-extrabold text-black"
-          style={{
-            background: "linear-gradient(135deg, var(--color-accent), var(--color-accent-blue))",
-          }}
-        >
-          FN
-        </div>
-        <div className="flex-1">
-          <div className="text-[13px] font-bold">FundedNext Platform Intelligence</div>
-          <div className="text-[9px] text-muted font-mono">
-            WEIGHTED VRS &middot; LIVE YOUTUBE API &middot; TIKTOK CSV &middot;{" "}
-            {activeModes.length} MODES &middot; BASELINE: {formatNumber(GLOBAL_BASELINE.medianViews)} MEDIAN
+    <div className="min-h-screen" style={{ background: "#000" }}>
+      {/* ── Apple-style nav bar ── */}
+      <nav
+        className="sticky top-0 z-50"
+        style={{
+          background: "rgba(0,0,0,0.85)",
+          backdropFilter: "blur(20px) saturate(180%)",
+          WebkitBackdropFilter: "blur(20px) saturate(180%)",
+          borderBottom: "1px solid rgba(255,255,255,0.07)",
+        }}
+      >
+        <div className="max-w-[1024px] mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-extrabold text-black shrink-0"
+              style={{ background: "linear-gradient(135deg, var(--color-accent), var(--color-accent-blue))" }}
+            >
+              FN
+            </div>
+            <span className="text-[14px] font-semibold tracking-tight" style={{ color: "#f5f5f7" }}>
+              FundedNext Intelligence
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
             {keywordBank && (
-              <> &middot; {keywordBank.categories.niche.length} KEYWORDS</>
+              <span className="text-[11px] hidden sm:block" style={{ color: "#86868b" }}>
+                {keywordBank.categories.niche.length} keywords
+              </span>
+            )}
+            {referenceStore && (
+              <span
+                className="text-[11px] font-mono px-2.5 py-1 rounded-full"
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  color: refStoreStatus !== "idle" ? "var(--color-accent)" : "#86868b",
+                }}
+              >
+                {referenceStore.entries.length} refs
+                {refStoreStatus !== "idle" && " · saved"}
+              </span>
             )}
           </div>
         </div>
-        {referenceStore && (
-          <div className="flex items-center gap-1.5">
+      </nav>
+
+      {/* ── Mode selector ── */}
+      <div className="max-w-[1024px] mx-auto px-6 pt-4">
+        <ModeSelector
+          activeModes={activeModes}
+          onToggle={toggleMode}
+          onSelectAll={selectAll}
+          onClear={clearModes}
+        />
+      </div>
+
+      {/* ── Platform tab switcher + input ── */}
+      <div className="max-w-[1024px] mx-auto px-6 pt-6 pb-2">
+        {/* Apple segmented control */}
+        <div className="flex justify-center mb-6">
+          <div
+            className="flex p-1 rounded-xl gap-0.5"
+            style={{ background: "rgba(255,255,255,0.06)" }}
+          >
+            {(
+              [
+                { id: "youtube", label: "YouTube", icon: "▶" },
+                { id: "tiktok", label: "TikTok", icon: "♪" },
+                { id: "instagram", label: "Instagram", icon: "◎" },
+              ] as { id: InputTab; label: string; icon: string }[]
+            ).map(({ id, label, icon }) => {
+              const active = inputTab === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setInputTab(id)}
+                  className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-[13px] font-medium transition-all"
+                  style={{
+                    background: active ? "rgba(255,255,255,0.12)" : "transparent",
+                    color: active ? "#f5f5f7" : "#86868b",
+                    boxShadow: active ? "0 1px 3px rgba(0,0,0,0.4)" : "none",
+                  }}
+                >
+                  <span className="text-[10px]">{icon}</span>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* YouTube tab */}
+        {inputTab === "youtube" && (
+          <div
+            className="rounded-2xl overflow-hidden"
+            style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
+          >
+            <UrlInput onAnalyze={analyze} loading={loading} status={status} error={error} />
             <div
-              className="text-[9px] font-mono px-2 py-1 rounded"
-              style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                color: refStoreStatus === "idle" ? "var(--color-text-muted)" : "var(--color-accent)",
-              }}
+              className="px-4 py-3 flex items-center gap-3"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
             >
-              {referenceStore.entries.length} REF
-              {refStoreStatus !== "idle" && (
-                <span style={{ color: "var(--color-vrs-excellent)" }}>
-                  {" "}&middot; {refStoreStatus.toUpperCase()}
-                </span>
-              )}
+              <span className="text-[11px]" style={{ color: "#86868b" }}>or bulk import via CSV</span>
+              <BulkImporter onComplete={(added) => { if (added > 0) { setRefStoreStatus("saved"); refreshReferenceStore(); } }} />
             </div>
           </div>
         )}
-      </div>
 
-      {/* Mode selector */}
-      <ModeSelector
-        activeModes={activeModes}
-        onToggle={toggleMode}
-        onSelectAll={selectAll}
-        onClear={clearModes}
-      />
-
-      {/* Input tabs + area */}
-      <div className="px-4 pt-3 max-w-[960px] mx-auto">
-        <div className="flex gap-1 mb-2">
-          <button
-            onClick={() => setInputTab("youtube")}
-            className="text-[10px] font-mono px-3 py-1.5 rounded-t transition-colors"
-            style={{
-              background: inputTab === "youtube" ? "var(--color-surface)" : "transparent",
-              color: inputTab === "youtube" ? "var(--color-accent)" : "var(--color-text-muted)",
-              borderBottom: inputTab === "youtube" ? "2px solid var(--color-accent)" : "2px solid transparent",
-            }}
+        {/* TikTok tab */}
+        {inputTab === "tiktok" && (
+          <div
+            className="rounded-2xl p-5 space-y-4"
+            style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
           >
-            YouTube URL
-          </button>
-          <button
-            onClick={() => setInputTab("tiktok")}
-            className="text-[10px] font-mono px-3 py-1.5 rounded-t transition-colors"
-            style={{
-              background: inputTab === "tiktok" ? "var(--color-surface)" : "transparent",
-              color: inputTab === "tiktok" ? "var(--color-accent)" : "var(--color-text-muted)",
-              borderBottom: inputTab === "tiktok" ? "2px solid var(--color-accent)" : "2px solid transparent",
-            }}
-          >
-            TikTok CSV
-          </button>
-        </div>
-
-        {inputTab === "youtube" ? (
-          <UrlInput onAnalyze={analyze} loading={loading} status={status} error={error} />
-        ) : (
-          <div className="space-y-2">
+            <div>
+              <div className="text-[11px] font-medium mb-2" style={{ color: "#86868b" }}>
+                Paste TikTok URL or @handle
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="https://tiktok.com/@handle or @username"
+                  className="flex-1 rounded-xl px-4 py-3 text-[13px] outline-none"
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "#f5f5f7",
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      if (val) analyze(val);
+                    }
+                  }}
+                />
+                <button
+                  onClick={(e) => {
+                    const input = (e.currentTarget.previousSibling as HTMLInputElement);
+                    if (input?.value.trim()) analyze(input.value.trim());
+                  }}
+                  disabled={loading}
+                  className="rounded-xl px-5 py-3 text-[13px] font-semibold"
+                  style={{ background: "var(--color-accent)", color: "#000", opacity: loading ? 0.5 : 1 }}
+                >
+                  {loading ? "..." : "Analyze"}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+              <span className="text-[11px]" style={{ color: "#86868b" }}>or upload CSV</span>
+              <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+            </div>
             <CsvUpload onUpload={analyzeTikTok} loading={loading} lastUpload={tiktokUploadInfo} />
-            {status && <div className="text-[10px] text-muted font-mono">{status}</div>}
-            {error && <div className="text-[10px] font-mono" style={{ color: "var(--color-vrs-rework)" }}>{error}</div>}
+            {status && <div className="text-[11px]" style={{ color: "#86868b" }}>{status}</div>}
+            {error && <div className="text-[11px]" style={{ color: "var(--color-vrs-rework)" }}>{error}</div>}
+          </div>
+        )}
+
+        {/* Instagram tab */}
+        {inputTab === "instagram" && (
+          <div
+            className="rounded-2xl p-5 space-y-4"
+            style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
+          >
+            <div>
+              <div className="text-[11px] font-medium mb-2" style={{ color: "#86868b" }}>
+                Paste Instagram URLs, handles, or content links (one per line)
+              </div>
+              <textarea
+                value={instagramInput}
+                onChange={(e) => setInstagramInput(e.target.value)}
+                placeholder={"https://instagram.com/p/...\n@handle\nhttps://instagram.com/reel/..."}
+                rows={4}
+                className="w-full rounded-xl px-4 py-3 text-[13px] outline-none resize-none"
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "#f5f5f7",
+                }}
+              />
+              <button
+                onClick={() => saveInstagram(instagramInput.split("\n"))}
+                disabled={!instagramInput.trim()}
+                className="mt-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all"
+                style={{
+                  background: instagramInput.trim() ? "linear-gradient(135deg, #E1306C, #833AB4)" : "rgba(255,255,255,0.05)",
+                  color: instagramInput.trim() ? "#fff" : "#86868b",
+                }}
+              >
+                Save to Queue
+              </button>
+              {instagramStatus && (
+                <div className="mt-2 text-[11px]" style={{ color: "var(--color-accent)" }}>
+                  {instagramStatus}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+              <span className="text-[11px]" style={{ color: "#86868b" }}>or bulk import via CSV</span>
+              <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+            </div>
+            <div
+              className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer"
+              style={{ borderColor: "rgba(255,255,255,0.1)" }}
+              onClick={() => document.getElementById("ig-csv-input")?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  const text = ev.target?.result as string;
+                  saveInstagram(text.split(/\r?\n/).filter((l) => l.trim()));
+                };
+                reader.readAsText(file);
+              }}
+            >
+              <input
+                id="ig-csv-input"
+                type="file"
+                accept=".csv,.txt"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const text = ev.target?.result as string;
+                    saveInstagram(text.split(/\r?\n/).filter((l) => l.trim()));
+                  };
+                  reader.readAsText(file);
+                }}
+              />
+              <div className="text-[13px] font-medium mb-1" style={{ color: "#86868b" }}>
+                Drop CSV or TXT file here
+              </div>
+              <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.2)" }}>
+                One URL or handle per line
+              </div>
+            </div>
+            <div
+              className="rounded-xl p-4 text-[12px]"
+              style={{ background: "rgba(131,58,180,0.08)", border: "1px solid rgba(131,58,180,0.2)", color: "#86868b" }}
+            >
+              Instagram entries are queued for analysis. Live scraping coming soon.
+            </div>
           </div>
         )}
       </div>
 
       {/* Results */}
-      <div className="p-4 max-w-[960px] mx-auto">
+      <div className="px-6 pb-8 max-w-[1024px] mx-auto">
         {!result && !loading && (
-          <div className="text-center py-12 text-muted">
-            <div className="text-4xl mb-3">&#x26A1;</div>
-            <div className="text-[15px] font-semibold mb-1.5">
-              {inputTab === "youtube" ? "Paste a YouTube URL to begin" : "Upload a TikTok CSV to begin"}
+          <div className="text-center py-16" style={{ color: "#86868b" }}>
+            <div className="text-5xl mb-4" style={{ opacity: 0.4 }}>◈</div>
+            <div className="text-[17px] font-semibold mb-2" style={{ color: "#f5f5f7" }}>
+              {inputTab === "youtube" ? "Paste a YouTube URL to begin" : inputTab === "tiktok" ? "Enter a TikTok handle or upload CSV" : "Add Instagram accounts or content"}
             </div>
-            <div className="text-[11px] text-border-light max-w-[380px] mx-auto leading-relaxed">
+            <div className="text-[13px] max-w-[420px] mx-auto leading-relaxed">
               {inputTab === "youtube" ? (
-                <>
-                  Video URL &rarr; content analysis + weighted VRS scoring
-                  <br />
-                  Channel URL &rarr; creator health + outlier detection + baseline
-                </>
+                <>Video URL · Channel URL · @handle · View count forecast at any future date</>
+              ) : inputTab === "tiktok" ? (
+                <>URL or handle → creator analysis · CSV → batch scoring</>
               ) : (
-                <>
-                  CSV upload &rarr; batch TRS scoring + competitor breakdown
-                  <br />
-                  Supports Apify, Piloterr, and native TikTok exports
-                </>
+                <>Queue Instagram accounts and content for analysis</>
               )}
             </div>
+          </div>
+        )}
+
+        {result?.type === "video" && (
+          <div className="mb-4">
+            <ViewForecastPanel
+              video={result.video}
+              forecastDate={forecastDate}
+              onDateChange={setForecastDate}
+            />
           </div>
         )}
 
@@ -830,6 +1039,20 @@ export default function Dashboard() {
               onChange={(updated) => setKeywordBank(updated)}
             />
           )}
+
+          {/* Hashtag Bank Manager */}
+          {hashtagBank && (
+            <HashtagBankManager
+              bank={hashtagBank}
+              onChange={setHashtagBank}
+            />
+          )}
+
+          {/* Competitor Bank Manager */}
+          <CompetitorBankManager
+            competitors={competitors}
+            onChange={setCompetitors}
+          />
 
           {/* Creator Blocklist */}
           <CreatorBlocklist
