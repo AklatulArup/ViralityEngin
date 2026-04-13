@@ -885,14 +885,21 @@ export default function Dashboard() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       const val = (e.target as HTMLInputElement).value.trim();
-                      if (val) analyze(val);
+                      if (val) {
+                        const normalized = val.includes("tiktok.com") ? val : `https://www.tiktok.com/@${val.replace(/^@/, "")}`;
+                        analyze(normalized);
+                      }
                     }
                   }}
                 />
                 <button
                   onClick={(e) => {
                     const input = (e.currentTarget.previousSibling as HTMLInputElement);
-                    if (input?.value.trim()) analyze(input.value.trim());
+                    const val = input?.value.trim();
+                    if (val) {
+                      const normalized = val.includes("tiktok.com") ? val : `https://www.tiktok.com/@${val.replace(/^@/, "")}`;
+                      analyze(normalized);
+                    }
                   }}
                   disabled={loading}
                   className="rounded-xl px-5 py-3 text-[13px] font-semibold"
