@@ -114,6 +114,72 @@
   100% { border-color: rgba(0,212,255,0.6); }
 }
 
+/* ── Additional ambient animations ── */
+
+@keyframes auroraPulse {
+  0%,100% { opacity: 0.035; transform: scaleX(1) scaleY(1); }
+  33%     { opacity: 0.07;  transform: scaleX(1.06) scaleY(1.15); }
+  66%     { opacity: 0.045; transform: scaleX(0.97) scaleY(0.9); }
+}
+@keyframes auroraShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes vignetteBreathe {
+  0%,100% { opacity: 0.38; }
+  50%     { opacity: 0.58; }
+}
+
+@keyframes lightStreakPass {
+  0%,65%   { transform: rotate(-28deg) translateX(-130vw); opacity: 0; }
+  68%      { opacity: 1; }
+  78%      { opacity: 1; }
+  82%,100% { transform: rotate(-28deg) translateX(160vw);  opacity: 0; }
+}
+@keyframes lightStreakPassB {
+  0%,50%   { transform: rotate(-22deg) translateX(-130vw); opacity: 0; }
+  53%      { opacity: 1; }
+  61%      { opacity: 1; }
+  65%,100% { transform: rotate(-22deg) translateX(160vw);  opacity: 0; }
+}
+@keyframes lightStreakPassC {
+  0%,78%   { transform: rotate(-33deg) translateX(-130vw); opacity: 0; }
+  80%      { opacity: 1; }
+  87%      { opacity: 1; }
+  91%,100% { transform: rotate(-33deg) translateX(160vw);  opacity: 0; }
+}
+
+@keyframes twinkleA {
+  0%,100% { opacity: 0.07; }
+  50%     { opacity: 0.32; }
+}
+@keyframes twinkleB {
+  0%,100% { opacity: 0.12; }
+  28%     { opacity: 0.04; }
+  55%     { opacity: 0.38; }
+}
+@keyframes twinkleC {
+  0%,100% { opacity: 0.04; }
+  42%     { opacity: 0.28; }
+}
+
+@keyframes gridDrift {
+  from { transform: translateY(0px); }
+  to   { transform: translateY(80px); }
+}
+
+@keyframes fadeUpIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cornerReveal {
+  from { width: 0; height: 0; opacity: 0; }
+  to   { width: 10px; height: 10px; opacity: 1; }
+}
+
 /* ═══════════════════════════════════════════
    UTILITY CLASSES
 ═══════════════════════════════════════════ */
@@ -176,6 +242,161 @@
   background-image: radial-gradient(circle, rgba(99,102,241,0.1) 1px, transparent 1px);
   background-size: 28px 28px;
 }
+
+/* ── Aurora top bar ── */
+.aurora-top {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 220px;
+  background: linear-gradient(180deg,
+    rgba(0,212,255,0.045) 0%,
+    rgba(124,58,237,0.03) 45%,
+    transparent 100%);
+  background-size: 200% 100%;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: screen;
+  animation: auroraShift 14s ease infinite, auroraPulse 9s ease-in-out infinite;
+}
+
+/* ── Vignette edge glow ── */
+.vignette-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 38%, transparent 42%, rgba(5,5,15,0.78) 100%);
+  pointer-events: none;
+  z-index: 0;
+  animation: vignetteBreathe 13s ease-in-out infinite;
+}
+
+/* ── Light streaks (diagonal, very low opacity) ── */
+.light-streak {
+  position: fixed;
+  width: 250vw;
+  height: 1px;
+  top: 38%;
+  left: -60vw;
+  pointer-events: none;
+  z-index: 1;
+  transform-origin: center center;
+}
+.light-streak-a {
+  background: linear-gradient(90deg, transparent 10%, rgba(0,212,255,0.09) 40%, rgba(0,212,255,0.13) 50%, rgba(0,212,255,0.09) 60%, transparent 90%);
+  animation: lightStreakPass 22s linear infinite;
+  top: 35%;
+}
+.light-streak-b {
+  background: linear-gradient(90deg, transparent 10%, rgba(124,58,237,0.07) 40%, rgba(124,58,237,0.1) 50%, rgba(124,58,237,0.07) 60%, transparent 90%);
+  animation: lightStreakPassB 30s linear infinite 6s;
+  top: 58%;
+}
+.light-streak-c {
+  background: linear-gradient(90deg, transparent 10%, rgba(255,45,120,0.05) 40%, rgba(255,45,120,0.08) 50%, rgba(255,45,120,0.05) 60%, transparent 90%);
+  animation: lightStreakPassC 26s linear infinite 14s;
+  top: 72%;
+}
+
+/* ── Horizontal grid drift ── */
+.grid-drift {
+  position: fixed;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 79px,
+    rgba(99,102,241,0.04) 79px,
+    rgba(99,102,241,0.04) 80px
+  );
+  animation: gridDrift 25s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Star field layers (CSS box-shadow trick) ── */
+.star-layer-a,
+.star-layer-b,
+.star-layer-c {
+  position: fixed;
+  top: 0; left: 0;
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: none;
+  z-index: 0;
+}
+.star-layer-a {
+  box-shadow:
+    89px 134px rgba(0,212,255,0.28), 210px 567px rgba(0,212,255,0.22),
+    456px 78px rgba(0,212,255,0.31), 743px 412px rgba(0,212,255,0.19),
+    1024px 256px rgba(0,212,255,0.25), 1312px 699px rgba(0,212,255,0.2),
+    1580px 145px rgba(0,212,255,0.27), 1820px 478px rgba(0,212,255,0.18),
+    334px 890px rgba(0,212,255,0.23), 612px 320px rgba(0,212,255,0.29),
+    892px 780px rgba(0,212,255,0.17), 1145px 512px rgba(0,212,255,0.24),
+    1490px 830px rgba(0,212,255,0.21), 78px 680px rgba(0,212,255,0.26),
+    1710px 290px rgba(0,212,255,0.19), 560px 190px rgba(0,212,255,0.22),
+    1230px 940px rgba(0,212,255,0.16), 980px 60px rgba(0,212,255,0.3),
+    380px 450px rgba(0,212,255,0.2), 1650px 610px rgba(0,212,255,0.23);
+  animation: twinkleA 9s ease-in-out infinite;
+}
+.star-layer-b {
+  box-shadow:
+    145px 223px rgba(124,58,237,0.22), 387px 701px rgba(124,58,237,0.17),
+    678px 34px rgba(124,58,237,0.26), 912px 567px rgba(124,58,237,0.15),
+    1190px 380px rgba(124,58,237,0.2), 1445px 810px rgba(124,58,237,0.18),
+    1730px 223px rgba(124,58,237,0.24), 234px 512px rgba(124,58,237,0.19),
+    790px 890px rgba(124,58,237,0.14), 1067px 145px rgba(124,58,237,0.22),
+    1380px 634px rgba(124,58,237,0.17), 560px 445px rgba(124,58,237,0.2),
+    1560px 378px rgba(124,58,237,0.16), 890px 245px rgba(124,58,237,0.25),
+    45px 820px rgba(124,58,237,0.18), 1890px 560px rgba(124,58,237,0.13);
+  animation: twinkleB 12s ease-in-out infinite 3s;
+}
+.star-layer-c {
+  box-shadow:
+    267px 389px rgba(255,45,120,0.15), 534px 145px rgba(255,45,120,0.12),
+    801px 723px rgba(255,45,120,0.17), 1068px 289px rgba(255,45,120,0.11),
+    1335px 534px rgba(255,45,120,0.14), 1690px 178px rgba(255,45,120,0.16),
+    423px 612px rgba(0,255,136,0.12), 956px 456px rgba(0,255,136,0.1),
+    1289px 734px rgba(0,255,136,0.14), 1745px 312px rgba(0,255,136,0.11),
+    167px 278px rgba(255,184,0,0.1), 734px 845px rgba(255,184,0,0.12),
+    1512px 478px rgba(255,184,0,0.09), 345px 967px rgba(255,184,0,0.11);
+  animation: twinkleC 15s ease-in-out infinite 7s;
+}
+
+/* ── Corner bracket cards ── */
+.bracket-card {
+  position: relative;
+}
+.bracket-card::before,
+.bracket-card::after {
+  content: '';
+  position: absolute;
+  width: 0; height: 0;
+  opacity: 0;
+  transition: width 0.2s ease, height 0.2s ease, opacity 0.2s ease;
+}
+.bracket-card::before {
+  top: 5px; left: 5px;
+  border-top: 1px solid rgba(0,212,255,0.55);
+  border-left: 1px solid rgba(0,212,255,0.55);
+  border-radius: 2px 0 0 0;
+}
+.bracket-card::after {
+  bottom: 5px; right: 5px;
+  border-bottom: 1px solid rgba(0,212,255,0.55);
+  border-right: 1px solid rgba(0,212,255,0.55);
+  border-radius: 0 0 2px 0;
+}
+.bracket-card:hover::before,
+.bracket-card:hover::after {
+  width: 12px; height: 12px; opacity: 1;
+}
+
+/* ── Entrance animation ── */
+.fade-up { animation: fadeUpIn 0.45s ease-out both; }
+.fade-up-1 { animation: fadeUpIn 0.45s ease-out 0.05s both; }
+.fade-up-2 { animation: fadeUpIn 0.45s ease-out 0.12s both; }
+.fade-up-3 { animation: fadeUpIn 0.45s ease-out 0.19s both; }
+.fade-up-4 { animation: fadeUpIn 0.45s ease-out 0.26s both; }
 
 /* Scanline parent */
 .scanline-host {

@@ -791,6 +791,25 @@ export default function Dashboard() {
         {/* Dot grid overlay */}
         <div className="dot-grid-bg" style={{ position: "absolute", inset: 0, opacity: 0.5 }} />
       </div>
+
+      {/* ── Aurora top glow ── */}
+      <div className="aurora-top" />
+
+      {/* ── Vignette edge ── */}
+      <div className="vignette-overlay" />
+
+      {/* ── Star fields ── */}
+      <div className="star-layer-a" />
+      <div className="star-layer-b" />
+      <div className="star-layer-c" />
+
+      {/* ── Horizontal grid drift ── */}
+      <div className="grid-drift" />
+
+      {/* ── Diagonal light streaks ── */}
+      <div className="light-streak light-streak-a" />
+      <div className="light-streak light-streak-b" />
+      <div className="light-streak light-streak-c" />
       {/* ══════════════ LEFT SIDEBAR ══════════════ */}
       <aside
         className="fixed left-0 top-0 bottom-0 w-[220px] flex flex-col overflow-y-auto z-40"
@@ -1047,20 +1066,20 @@ export default function Dashboard() {
 
           {/* Loading skeleton */}
           {loading && (
-            <div className="space-y-4 animate-pulse">
+            <div className="space-y-4">
               <div className="grid grid-cols-4 gap-4">
                 {[...Array(4)].map((_, i) => (
-                  <div key={i} className="rounded-2xl h-24" style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.08), rgba(0,212,255,0.05))", border: "1px solid rgba(99,102,241,0.1)", animation: "glowPulse 2s ease-in-out infinite" }} />
+                  <div key={i} className="bracket-card rounded-2xl h-24" style={{ background: `linear-gradient(135deg, rgba(99,102,241,0.08), rgba(0,212,255,0.05))`, border: "1px solid rgba(99,102,241,0.1)", animation: `glowPulse ${1.8 + i * 0.3}s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }} />
                 ))}
               </div>
-              <div className="rounded-2xl h-48" style={{ background: "linear-gradient(135deg, rgba(124,58,237,0.06), rgba(0,212,255,0.04))", border: "1px solid rgba(99,102,241,0.08)" }} />
-              <div className="rounded-2xl h-32" style={{ background: "linear-gradient(135deg, rgba(255,45,120,0.05), rgba(124,58,237,0.06))", border: "1px solid rgba(99,102,241,0.08)" }} />
+              <div className="rounded-2xl h-48" style={{ background: "linear-gradient(135deg, rgba(124,58,237,0.06), rgba(0,212,255,0.04))", border: "1px solid rgba(99,102,241,0.08)", animation: "glowPulse 2.4s ease-in-out infinite 0.6s" }} />
+              <div className="rounded-2xl h-32" style={{ background: "linear-gradient(135deg, rgba(255,45,120,0.05), rgba(124,58,237,0.06))", border: "1px solid rgba(99,102,241,0.08)", animation: "glowPulse 2.1s ease-in-out infinite 0.9s" }} />
             </div>
           )}
 
           {/* ── Reverse Engineer panel ── */}
           {activePanel === "reverse-engineer" && (
-            <div className="mb-6">
+            <div className="mb-6 fade-up">
               <ReverseEngineerPanel
                 platform={inputTab}
                 result={result}
@@ -1080,7 +1099,7 @@ export default function Dashboard() {
 
           {/* ── Tool panels (Libraries / Reference Tools) ── */}
           {activePanel === "libraries" && (
-            <div className="mb-6 space-y-4">
+            <div className="mb-6 space-y-4 fade-up">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-[16px] font-semibold" style={{ color: "#F0F0FF" }}>Libraries</h2>
                 <button onClick={() => setActivePanel(null)} className="text-[11px] px-3 py-1 rounded-lg" style={{ background: "rgba(139,92,246,0.10)", color: "#9090C0" }}>✕ Close</button>
@@ -1093,7 +1112,7 @@ export default function Dashboard() {
           )}
 
           {activePanel === "ref-tools" && (
-            <div className="mb-6 space-y-4">
+            <div className="mb-6 space-y-4 fade-up">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-[16px] font-semibold" style={{ color: "#F0F0FF" }}>Reference Tools</h2>
                 <button onClick={() => setActivePanel(null)} className="text-[11px] px-3 py-1 rounded-lg" style={{ background: "rgba(139,92,246,0.10)", color: "#9090C0" }}>✕ Close</button>
