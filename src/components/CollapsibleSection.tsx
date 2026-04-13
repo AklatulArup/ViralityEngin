@@ -21,15 +21,15 @@ export default function CollapsibleSection({
 
   return (
     <div
-      className="rounded-xl overflow-hidden"
+      className="rounded-2xl overflow-hidden"
       style={{
-        background: "rgba(13,13,30,0.85)",
-        border: open
-          ? `1px solid color-mix(in srgb, ${accentColor} 35%, transparent)`
-          : "1px solid rgba(99,102,241,0.18)",
+        background: open ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.03)",
+        backdropFilter: "blur(24px) saturate(160%)",
+        WebkitBackdropFilter: "blur(24px) saturate(160%)",
+        border: `1px solid ${open ? `color-mix(in srgb, ${accentColor} 30%, rgba(255,255,255,0.10))` : "rgba(255,255,255,0.07)"}`,
         boxShadow: open
-          ? `0 0 20px color-mix(in srgb, ${accentColor} 10%, transparent), inset 0 0 20px color-mix(in srgb, ${accentColor} 3%, transparent)`
-          : "none",
+          ? `0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.15), 0 0 24px color-mix(in srgb, ${accentColor} 6%, transparent)`
+          : "0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)",
         transition: "all 0.3s ease",
       }}
     >
@@ -37,9 +37,7 @@ export default function CollapsibleSection({
         onClick={() => setOpen(!open)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
         style={{
-          background: open
-            ? `color-mix(in srgb, ${accentColor} 6%, transparent)`
-            : "transparent",
+          background: open ? `color-mix(in srgb, ${accentColor} 5%, rgba(255,255,255,0.03))` : "transparent",
         }}
       >
         <span
@@ -54,14 +52,11 @@ export default function CollapsibleSection({
           &#9654;
         </span>
         <div className="flex-1">
-          <div
-            className="text-[13px] font-semibold transition-colors"
-            style={{ color: open ? accentColor : "var(--color-foreground)" }}
-          >
+          <div className="text-[13px] font-semibold" style={{ color: open ? accentColor : "rgba(232,232,255,0.85)" }}>
             {title}
           </div>
           {subtitle && (
-            <div className="text-[10px] mt-0.5" style={{ color: "var(--color-muted)" }}>{subtitle}</div>
+            <div className="text-[10px] mt-0.5" style={{ color: "rgba(232,232,255,0.38)" }}>{subtitle}</div>
           )}
         </div>
         {open && (
@@ -79,7 +74,7 @@ export default function CollapsibleSection({
         <div
           className="px-4 pb-4"
           style={{
-            borderTop: `1px solid color-mix(in srgb, ${accentColor} 15%, transparent)`,
+            borderTop: `1px solid rgba(255,255,255,0.06)`,
             paddingTop: 12,
           }}
         >

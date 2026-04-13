@@ -827,10 +827,10 @@ export default function Dashboard() {
       {/* ══════════════ LEFT SIDEBAR ══════════════ */}
       <aside
         className="fixed left-0 top-0 bottom-0 w-[220px] flex flex-col overflow-y-auto z-40"
-        style={{ background: "linear-gradient(180deg, rgba(10,10,28,0.98) 0%, rgba(8,8,22,0.98) 100%)", borderRight: "1px solid rgba(99,102,241,0.2)", zIndex: 40 }}
+        style={{ background: "rgba(6,6,20,0.55)", backdropFilter: "blur(40px) saturate(200%)", WebkitBackdropFilter: "blur(40px) saturate(200%)", borderRight: "1px solid rgba(255,255,255,0.08)", boxShadow: "4px 0 24px rgba(0,0,0,0.5), inset -1px 0 0 rgba(255,255,255,0.04)", zIndex: 40 }}
       >
         {/* Logo */}
-        <div className="px-4 h-14 flex items-center gap-2.5 shrink-0" style={{ borderBottom: "1px solid rgba(139,92,246,0.15)" }}>
+        <div className="px-4 h-14 flex items-center gap-2.5 shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
           <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-extrabold text-black shrink-0"
             style={{ background: "linear-gradient(135deg, #00D4FF, #7C3AED)" }}>
             FN
@@ -865,7 +865,7 @@ export default function Dashboard() {
           })}
         </div>
 
-        <div className="mx-4 my-1" style={{ height: 1, background: "rgba(139,92,246,0.10)" }} />
+        <div className="glass-divider mx-4 my-1" />
 
         {/* Analysis Modes */}
         <div className="px-3 py-3">
@@ -873,19 +873,19 @@ export default function Dashboard() {
           <ModeSelector activeModes={activeModes} onToggle={toggleMode} onSelectAll={selectAll} onClear={clearModes} />
         </div>
 
-        <div className="mx-4 my-1" style={{ height: 1, background: "rgba(139,92,246,0.10)" }} />
+        <div className="glass-divider mx-4 my-1" />
 
         {/* Pool Stats */}
         <div className="px-4 py-3">
           <div className="text-[10px] font-semibold tracking-widest mb-2.5" style={{ color: "rgba(0,255,136,0.6)", letterSpacing: "0.15em" }}>REFERENCE POOL</div>
           <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl p-2.5" style={{ background: "rgba(0,255,136,0.05)", border: "1px solid rgba(0,255,136,0.12)" }}>
+            <div className="glass-card" style={{ padding: "10px" }}>
               <div className="text-[20px] font-bold leading-none neon-green" style={{ color: "#00FF88" }}>
                 {referenceStore?.entries.length ?? 0}
               </div>
               <div className="text-[10px] mt-0.5" style={{ color: "rgba(232,232,255,0.4)" }}>Entries</div>
             </div>
-            <div className="rounded-xl p-2.5" style={{ background: "rgba(0,212,255,0.06)", border: "1px solid rgba(0,212,255,0.12)" }}>
+            <div className="glass-card" style={{ padding: "10px" }}>
               <div className="text-[20px] font-bold leading-none neon-cyan" style={{ color: "#00D4FF" }}>
                 {keywordBank?.categories.niche.length ?? 0}
               </div>
@@ -897,7 +897,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="mx-4 my-1" style={{ height: 1, background: "rgba(139,92,246,0.10)" }} />
+        <div className="glass-divider mx-4 my-1" />
 
         {/* Reverse Engineer — dedicated Mode D entry */}
         <div className="px-3 py-2">
@@ -913,8 +913,11 @@ export default function Dashboard() {
                 }}
                 className="w-full text-left rounded-xl px-3 py-3 transition-all"
                 style={{
-                  background: active ? "rgba(255,159,10,0.12)" : "rgba(255,255,255,0.03)",
-                  border: active ? "1px solid rgba(255,159,10,0.3)" : "1px solid rgba(139,92,246,0.10)",
+                  background: active ? "rgba(255,184,0,0.10)" : "rgba(255,255,255,0.04)",
+                  backdropFilter: "blur(16px)",
+                  WebkitBackdropFilter: "blur(16px)",
+                  border: active ? "1px solid rgba(255,184,0,0.35)" : "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: active ? "0 4px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.14)" : "inset 0 1px 0 rgba(255,255,255,0.06)",
                 }}
               >
                 <div className="flex items-center gap-2.5">
@@ -935,7 +938,7 @@ export default function Dashboard() {
           })()}
         </div>
 
-        <div className="mx-4 my-1" style={{ height: 1, background: "rgba(139,92,246,0.10)" }} />
+        <div className="glass-divider mx-4 my-1" />
 
         {/* Nav buttons → open panels in main content */}
         <div className="px-3 py-2 space-y-0.5">
@@ -974,7 +977,7 @@ export default function Dashboard() {
         {/* ── Sticky top search bar ── */}
         <div
           className="sticky top-0 z-30 px-6 py-3 flex items-center gap-3"
-          style={{ background: "rgba(5,5,15,0.95)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(99,102,241,0.2)", position: "relative", zIndex: 30 }}
+          style={{ background: "rgba(5,5,15,0.50)", backdropFilter: "blur(30px) saturate(180%)", WebkitBackdropFilter: "blur(30px) saturate(180%)", borderBottom: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 4px 24px rgba(0,0,0,0.4), inset 0 -1px 0 rgba(255,255,255,0.04)", position: "relative", zIndex: 30 }}
         >
           {/* Search input — adapts to active platform */}
           {inputTab === "youtube" && (
@@ -990,8 +993,7 @@ export default function Dashboard() {
                 value={tiktokInputVal}
                 onChange={e => setTiktokInputVal(e.target.value)}
                 placeholder="https://tiktok.com/@handle or @username"
-                className="flex-1 rounded-xl px-4 py-2.5 text-[13px] outline-none"
-                style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.18)", color: "#F0F0FF" }}
+                className="glass-input flex-1 rounded-xl px-4 py-2.5 text-[13px]" style={{ color: "#F0F0FF" }}
                 onKeyDown={e => {
                   if (e.key === "Enter" && tiktokInputVal.trim()) {
                     const v = tiktokInputVal.trim();
@@ -1023,8 +1025,7 @@ export default function Dashboard() {
                 value={instagramInput}
                 onChange={e => setInstagramInput(e.target.value)}
                 placeholder="@handle or https://instagram.com/reel/..."
-                className="flex-1 rounded-xl px-4 py-2.5 text-[13px] outline-none"
-                style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.18)", color: "#F0F0FF" }}
+                className="glass-input flex-1 rounded-xl px-4 py-2.5 text-[13px]" style={{ color: "#F0F0FF" }}
                 onKeyDown={e => {
                   if (e.key === "Enter" && instagramInput.trim()) {
                     const v = instagramInput.trim();
@@ -1059,17 +1060,17 @@ export default function Dashboard() {
 
           {/* Status / error chips */}
           {status && (
-            <span className="text-[11px] shrink-0 px-3 py-1 rounded-full" style={{ background: "rgba(0,212,170,0.12)", color: "#00D4AA" }}>
+            <span className="glass-pill text-[11px] shrink-0 px-3 py-1 rounded-full" style={{ color: "#00D4AA" }}>
               {status}
             </span>
           )}
           {error && (
-            <span className="text-[11px] shrink-0 px-3 py-1 rounded-full" style={{ background: "rgba(255,69,58,0.12)", color: "#FF453A" }}>
+            <span className="glass-pill text-[11px] shrink-0 px-3 py-1 rounded-full" style={{ color: "#FF453A" }}>
               {error}
             </span>
           )}
           {instagramStatus && (
-            <span className="text-[11px] shrink-0 px-3 py-1 rounded-full" style={{ background: "rgba(0,212,170,0.12)", color: "#00D4AA" }}>
+            <span className="glass-pill text-[11px] shrink-0 px-3 py-1 rounded-full" style={{ color: "#00D4AA" }}>
               {instagramStatus}
             </span>
           )}
@@ -1176,8 +1177,8 @@ export default function Dashboard() {
                     <div
                       key={label}
                       title={tip}
-                      className="rounded-2xl p-4 cursor-default"
-                      style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.15)" }}
+                      className="glass-card cursor-default"
+                      style={{ padding: "16px" }}
                     >
                       <div className="text-[22px] font-bold" style={{ color }}>{value}</div>
                       <div className="text-[11px] mt-0.5" style={{ color: "#7878A8" }}>{label}</div>
@@ -1208,8 +1209,8 @@ export default function Dashboard() {
                     <div
                       key={label}
                       title={tip}
-                      className="rounded-2xl p-4 cursor-default transition-transform hover:scale-[1.02]"
-                      style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.15)" }}
+                      className="glass-card cursor-default"
+                      style={{ padding: "16px" }}
                     >
                       <div className="text-[11px] mb-1.5" style={{ color: "#7878A8" }}>{label}</div>
                       <div className="text-[22px] font-bold leading-none" style={{ color }}>{value}</div>
@@ -1279,8 +1280,8 @@ export default function Dashboard() {
                     <div
                       key={label}
                       title={tip}
-                      className="rounded-2xl p-4 cursor-default transition-transform hover:scale-[1.02]"
-                      style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.15)" }}
+                      className="glass-card cursor-default"
+                      style={{ padding: "16px" }}
                     >
                       <div className="text-[11px] mb-1.5" style={{ color: "#7878A8" }}>{label}</div>
                       <div className="text-[22px] font-bold leading-none" style={{ color }}>{value}</div>
