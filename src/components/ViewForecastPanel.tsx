@@ -14,6 +14,7 @@ interface ViewForecastPanelProps {
 export default function ViewForecastPanel({ video, forecastDate, onDateChange }: ViewForecastPanelProps) {
   const [showSignals, setShowSignals] = useState(false);
   const [showFormula, setShowFormula] = useState(false);
+  const [showConfidence, setShowConfidence] = useState(false);
 
   const forecast = useMemo(() => {
     if (!forecastDate) return null;
@@ -95,10 +96,90 @@ export default function ViewForecastPanel({ video, forecastDate, onDateChange }:
                 </span></>
               )}
               {" · "}Confidence:{" "}
-              <span style={{ color: confidenceColor[forecast.confidence] }} className="font-medium">
-                {forecast.confidence}
-              </span>
+              <button
+                onClick={() => setShowConfidence(v => !v)}
+                className="font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-80"
+                style={{ color: confidenceColor[forecast.confidence] }}
+              >
+                {forecast.confidence} ({forecast.confidencePoints}/100)
+              </button>
             </div>
+
+            {/* ── Confidence breakdown ── */}
+            {showConfidence && (
+              <div
+                className="mb-4 rounded-2xl p-4 space-y-3"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", backdropFilter: "blur(16px)" }}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#86868b" }}>Why is confidence <span style={{ color: confidenceColor[forecast.confidence] }}>{forecast.confidence}</span>?</span>
+                  <span className="text-[11px] font-mono" style={{ color: confidenceColor[forecast.confidence] }}>{forecast.confidencePoints} / 100 pts</span>
+                </div>
+
+                {/* Score bar */}
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${forecast.confidencePoints}%`,
+                      background: `linear-gradient(90deg, ${confidenceColor[forecast.confidence]}, ${confidenceColor[forecast.confidence]}aa)`,
+                    }}
+                  />
+                </div>
+
+                {/* Factor rows */}
+                <div className="space-y-2.5 pt-1">
+                  {forecast.confidenceFactors.map((f) => (
+                    <div key={f.label}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-medium" style={{ color: "#f5f5f7" }}>{f.label}</span>
+                        <span className="text-[11px] font-mono" style={{ color: f.earned >= f.max * 0.7 ? "#30D158" : f.earned >= f.max * 0.4 ? "#FFD60A" : "#FF453A" }}>
+                          {f.earned} / {f.max}
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden mb-1" style={{ background: "rgba(255,255,255,0.07)" }}>
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${(f.earned / f.max) * 100}%`,
+                            background: f.earned >= f.max * 0.7 ? "#30D158" : f.earned >= f.max * 0.4 ? "#FFD60A" : "#FF453A",
+                            opacity: 0.85,
+                          }}
+                        />
+                      </div>
+                      <p className="text-[10px]" style={{ color: "#86868b" }}>{f.tip}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* How to improve */}
+                <div className="pt-2 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "#86868b" }}>How to raise confidence</div>
+                  <ul className="space-y-1">
+                    {forecast.confidencePoints < 70 && (
+                      <>
+                        {forecast.confidenceFactors.find(f => f.label === "Days of data" && f.earned < 28) && (
+                          <li className="text-[11px]" style={{ color: "#f5f5f7" }}>⏳ Wait — confidence auto-increases as more days of data accumulate (full curve needs 14d+)</li>
+                        )}
+                        {forecast.confidenceFactors.find(f => f.label === "View volume" && f.earned < 14) && (
+                          <li className="text-[11px]" style={{ color: "#f5f5f7" }}>📈 Promote the video to drive more views — models stabilise above 10K views</li>
+                        )}
+                        {forecast.confidenceFactors.find(f => f.label === "Engagement quality" && f.earned < 12) && (
+                          <li className="text-[11px]" style={{ color: "#f5f5f7" }}>💬 Drive comments and likes via CTAs — engagement above 2% significantly improves accuracy</li>
+                        )}
+                        {forecast.confidenceFactors.find(f => f.label === "Platform score fit" && f.earned < 12) && (
+                          <li className="text-[11px]" style={{ color: "#f5f5f7" }}>🎯 Add more reference videos to the pool — a richer pool calibrates the platform model to your niche</li>
+                        )}
+                      </>
+                    )}
+                    {forecast.confidencePoints >= 70 && (
+                      <li className="text-[11px]" style={{ color: "#30D158" }}>✓ Confidence is high — projections are well-calibrated to this video&apos;s performance pattern</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            )}
+
 
             {/* Low / Expected / High cards */}
             <div className="grid grid-cols-3 gap-3 mb-5">

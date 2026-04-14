@@ -35,6 +35,13 @@ export interface MonthlyProjection {
   high: number;
 }
 
+export interface ConfidenceFactor {
+  label: string;
+  earned: number;
+  max: number;
+  tip: string;
+}
+
 export interface ViewForecast {
   low: number;
   mid: number;
@@ -44,6 +51,8 @@ export interface ViewForecast {
   platform: ForecastPlatform;
   platformLabel: string;
   confidence: "low" | "medium" | "high";
+  confidencePoints: number;
+  confidenceFactors: ConfidenceFactor[];
   platformScore: PlatformScore;
   coefficient: ViralityCoefficient;
   monthlyProjections: MonthlyProjection[];
@@ -293,7 +302,32 @@ export function forecastViews(
   const spreadFactor = Math.min(0.6, 0.15 + (daysToTarget / daysSince) * 0.06);
   const low = Math.round(mid * (1 - spreadFactor));
 
-  const confidence: "low" | "medium" | "high" = daysSince < 3 ? "low" : daysSince < 10 ? "medium" : "high";
+  // ── Multi-factor confidence scoring ──
+  // Each factor contributes points; total determines tier
+  let confidencePoints = 0;
+  const confidenceFactors: { label: string; earned: number; max: number; tip: string }[] = [];
+
+  // 1. Days since publish (max 40pts) — more data = more reliable decay curve fit
+  const daysPts = daysSince >= 14 ? 40 : daysSince >= 7 ? 28 : daysSince >= 3 ? 16 : 6;
+  confidenceFactors.push({ label: "Days of data", earned: daysPts, max: 40, tip: daysSince >= 14 ? `${daysSince}d — full decay curve mapped` : daysSince >= 7 ? `${daysSince}d — 1 week of signal` : daysSince >= 3 ? `${daysSince}d — early signal only` : `${daysSince}d — too early to model reliably` });
+  confidencePoints += daysPts;
+
+  // 2. View volume (max 20pts) — higher views = statistical stability
+  const viewsPts = video.views >= 100000 ? 20 : video.views >= 10000 ? 14 : video.views >= 1000 ? 8 : 3;
+  confidenceFactors.push({ label: "View volume", earned: viewsPts, max: 20, tip: `${video.views.toLocaleString()} views — ${video.views >= 100000 ? "statistically stable" : video.views >= 10000 ? "moderate sample" : "small sample, high variance"}` });
+  confidencePoints += viewsPts;
+
+  // 3. Engagement quality (max 20pts) — real signals vs bot/low-intent traffic
+  const engPts = video.engagement >= 5 ? 20 : video.engagement >= 2 ? 12 : video.engagement >= 0.5 ? 6 : 2;
+  confidenceFactors.push({ label: "Engagement quality", earned: engPts, max: 20, tip: `${video.engagement.toFixed(2)}% engagement — ${video.engagement >= 5 ? "high intent audience" : video.engagement >= 2 ? "average intent" : "low signal quality"}` });
+  confidencePoints += engPts;
+
+  // 4. Platform score reliability (max 20pts) — how well the model fits this content
+  const scorePts = Math.round(platformScore.score * 20);
+  confidenceFactors.push({ label: "Platform score fit", earned: scorePts, max: 20, tip: `${(platformScore.score * 100).toFixed(0)}% platform readiness — ${platformScore.score >= 0.6 ? "model fits well" : platformScore.score >= 0.3 ? "partial fit" : "low fit, projections are estimates"}` });
+  confidencePoints += scorePts;
+
+  const confidence: "low" | "medium" | "high" = confidencePoints >= 70 ? "high" : confidencePoints >= 45 ? "medium" : "low";
 
   return {
     low: Math.max(low, video.views),
@@ -304,6 +338,8 @@ export function forecastViews(
     platform,
     platformLabel: PLATFORM_LABELS[platform],
     confidence,
+    confidencePoints,
+    confidenceFactors,
     platformScore,
     coefficient,
     monthlyProjections,
