@@ -40,12 +40,7 @@ import type {
 import { MODES } from "@/lib/modes";
 import { parseInput } from "@/lib/url-parser";
 import { runVRS, runTRS } from "@/lib/vrs";
-import {
-  daysAgo,
-  velocity,
-  engagement,
-  formatNumber,
-} from "@/lib/formatters";
+import { daysAgo, velocity, engagement, formatNumber } from "@/lib/formatters";
 import {
   GLOBAL_BASELINE,
   calculateMedian,
@@ -978,7 +973,7 @@ export default function Dashboard() {
                   className="font-mono font-bold leading-none"
                   style={{ fontSize: 17, color, textShadow: `0 0 12px ${color}BB, 0 0 24px ${color}55` }}
                 >
-                  {typeof value === "number" && value >= 1000 ? `${(value/1000).toFixed(1)}K` : value}
+                  {typeof value === "number" ? formatNumber(value) : value}
                 </div>
                 <div className="font-mono mt-0.5" style={{ fontSize: 9, color: "#8A8885", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   {label}
@@ -1498,7 +1493,7 @@ export default function Dashboard() {
                           {/* Metrics snapshot */}
                           <div className="flex items-center gap-4 shrink-0">
                             {[
-                              { label: "VIEWS",  value: typeof entry.metrics.views === "number" ? (entry.metrics.views >= 1000 ? `${(entry.metrics.views/1000).toFixed(0)}K` : String(entry.metrics.views)) : "—", color: "#2ECC8A" },
+                              { label: "VIEWS",  value: typeof entry.metrics.views === "number" ? (formatNumber(entry.metrics.views as number)) : "—", color: "#2ECC8A" },
                               { label: "VRS",    value: entry.metrics.vrsScore ? `${entry.metrics.vrsScore}` : "—", color: "#A78BFA" },
                               { label: "ENGAGE", value: entry.metrics.engagement ? `${entry.metrics.engagement}%` : "—", color: "#F59E0B" },
                             ].map(({ label, value, color }) => (
@@ -1553,7 +1548,7 @@ export default function Dashboard() {
                                 <div key={key}>
                                   <div style={{ fontSize: 8, color: "#4A4845", letterSpacing: "0.1em" }}>{key.toUpperCase()}</div>
                                   <div style={{ fontSize: 11, color: "#6B6860" }}>
-                                    {typeof val === "number" && val >= 1000 ? `${(val/1000).toFixed(1)}K` : String(val)}
+                                    {typeof val === "number" ? formatNumber(val) : String(val)}
                                   </div>
                                 </div>
                               ))}
@@ -1640,13 +1635,14 @@ export default function Dashboard() {
             const growingCount = entries.filter(e=>e.metrics?.trend==="growing").length;
 
             const TICKER_ITEMS = [
-              { label: "Reference pool depth",      value: `${poolTotal} videos`,              color: "#A78BFA" },
+              { label: "Reference pool depth",      value: `${formatNumber(poolTotal)} videos`,              color: "#A78BFA" },
               { label: "Pool avg VRS score",        value: avgPoolVRS > 0 ? `${avgPoolVRS}/100` : "—",    color: "#60A5FA" },
               { label: "Pool avg engagement",       value: parseFloat(avgPoolEng) > 0 ? `${avgPoolEng}%` : "—", color: "#F59E0B" },
               { label: "High-VRS content (≥80)",   value: outlierCount > 0 ? `${outlierCount} videos` : "—", color: "#2ECC8A" },
               { label: "Growing creators tracked", value: growingCount > 0 ? `${growingCount}` : "—",   color: "#06B6D4" },
               { label: "Keyword bank size",         value: `${kwCount} keywords`,               color: "#E879F9" },
-              { label: "Creators in pool",          value: `${poolCreators}`,                   color: "#EF4444" },
+              { label: "Creators in pool",          value: `${formatNumber(poolCreators)}`,
+                   color: "#EF4444" },
               ...(topCreators[0] ? [{ label: `Top VRS · ${topCreators[0].channelName}`, value: `${topCreators[0].metrics?.vrsScore ?? "—"}/100`, color: "#2ECC8A" }] : []),
             ];
 
@@ -1713,7 +1709,7 @@ export default function Dashboard() {
                         {/* Centre text */}
                         <text x="50" y="46" textAnchor="middle" fill="#E8E6E1" fontSize="14" fontWeight="700"
                           style={{ transform: "rotate(90deg)", transformOrigin: "50px 50px", fontFamily: "monospace" }}>
-                          {poolTotal >= 1000 ? `${(poolTotal/1000).toFixed(1)}K` : poolTotal}
+                          {formatNumber(poolTotal)}
                         </text>
                         <text x="50" y="58" textAnchor="middle" fill="#6B6860" fontSize="7"
                           style={{ transform: "rotate(90deg)", transformOrigin: "50px 50px", fontFamily: "monospace", letterSpacing: "0.1em" }}>
@@ -1743,7 +1739,7 @@ export default function Dashboard() {
                     <div className="space-y-3">
                       {[
                         { label: "Total Videos",  value: poolTotal.toLocaleString(), color: "#2ECC8A", icon: "▶" },
-                        { label: "Avg Views",     value: poolAvgViews >= 1000 ? `${(poolAvgViews/1000).toFixed(0)}K` : poolAvgViews.toLocaleString(), color: "#60A5FA", icon: "◈" },
+                        { label: "Avg Views",     value: formatNumber(poolAvgViews), color: "#60A5FA", icon: "◈" },
                         { label: "Creators",      value: poolCreators.toLocaleString(), color: "#F59E0B", icon: "◎" },
                         { label: "Keywords",      value: kwCount.toLocaleString(), color: "#A78BFA", icon: "◆" },
                       ].map(({ label, value, color, icon }) => (
@@ -1977,7 +1973,7 @@ export default function Dashboard() {
               { label: "Likes",        value: v.likes.toLocaleString(),         color: "#60A5FA", tip: "Total likes" },
               { label: "Engagement",   value: `${v.engagement.toFixed(2)}%`,    color: "#F59E0B", tip: "Likes + comments / views" },
               { label: "Velocity",     value: `${v.velocity.toLocaleString()}/d`,color: "#A78BFA", tip: "Avg views/day since publish" },
-              ...(ch ? [{ label: "Subscribers", value: `${(ch.subs/1000).toFixed(0)}K`, color: "#EF4444", tip: "Channel subs" }] : []),
+              ...(ch ? [{ label: "Subscribers", value: formatNumber(ch.subs), color: "#EF4444", tip: "Channel subs" }] : []),
               ...(ch ? [{ label: "Ch. Median",  value: result.channelMedian.toLocaleString(), color: "#06B6D4", tip: "Median views/video on channel" }] : []),
             ];
             return (
@@ -2036,9 +2032,9 @@ export default function Dashboard() {
             const topVideo = videos[0];
             const metrics  = [
               { label: "Videos",       value: videos.length.toLocaleString(), color: "#2ECC8A", tip: "Posts scraped" },
-              { label: "Total Views",  value: `${(total/1000).toFixed(0)}K`,  color: "#60A5FA", tip: "Combined views" },
+              { label: "Total Views",  value: formatNumber(total),  color: "#60A5FA", tip: "Combined views" },
               { label: "Avg Engage",   value: `${avgEng.toFixed(2)}%`,         color: "#F59E0B", tip: "Avg engagement rate" },
-              { label: "Top Views",    value: topVideo ? `${(topVideo.views/1000).toFixed(0)}K` : "—", color: "#A78BFA", tip: "Highest view count" },
+              { label: "Top Views",    value: topVideo ? formatNumber(topVideo.views) : "—", color: "#A78BFA", tip: "Highest view count" },
               { label: "Creators",     value: new Set(videos.map(v => v.channel)).size.toLocaleString(), color: "#EF4444", tip: "Unique creators" },
             ];
             return (

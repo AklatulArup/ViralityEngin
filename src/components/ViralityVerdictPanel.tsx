@@ -162,7 +162,7 @@ export default function ViralityVerdictPanel({ video, channel, channelMedian, re
     setAiTriggered(true);
     try {
       const prompt = `Video: "${video.title}"
-Channel: ${video.channel} (${channel?.subs ? `${(channel.subs/1000).toFixed(0)}K subs` : "unknown subs"}, ${recentVideos.length} recent videos, channel median ${chMedianViews.toLocaleString()} views)
+Channel: ${video.channel} (${channel?.subs ? `${channel.subs >= 1000000 ? (channel.subs/1000000).toFixed(1).replace(/\.0$/,"")+"M" : (channel.subs/1000).toFixed(0)+"K"} subs` : "unknown subs"}, ${recentVideos.length} recent videos, channel median ${chMedianViews.toLocaleString()} views)
 Platform: YouTube | Format: ${format.label} | Niche: ${niche}
 Performance: ${video.views.toLocaleString()} views in ${video.days} days → ${video.velocity.toLocaleString()} views/day velocity
 vs Channel Median: ${video.vsBaseline}x (${perfVsChannel > 0 ? "+" : ""}${perfVsChannel}%)

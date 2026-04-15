@@ -88,7 +88,7 @@ function buildPrompt(
 
   const base = `VIDEO DATA:
 Title: "${video.title}"
-Channel: ${video.channel} | ${channel?.subs ? `${(channel.subs/1000).toFixed(0)}K subscribers` : "unknown subs"}
+Channel: ${video.channel} | ${channel?.subs ? `${channel.subs >= 1000000 ? (channel.subs/1000000).toFixed(1).replace(/\.0$/,"")+"M" : (channel.subs/1000).toFixed(0)+"K"} subscribers` : "unknown subs"}
 Format: ${format} | Views: ${video.views.toLocaleString()} in ${video.days} days
 Velocity: ${video.velocity.toLocaleString()} views/day | VRS Score: ${video.vrs.estimatedFullScore}/100
 vs Channel Median: ${video.vsBaseline}x (median: ${channelMedian.toLocaleString()})

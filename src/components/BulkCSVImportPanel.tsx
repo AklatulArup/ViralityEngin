@@ -81,17 +81,47 @@ export default function BulkCSVImportPanel({ onComplete }: BulkCSVImportPanelPro
   }, []);
 
   async function runImport() {
-    if (!parsed.length) return;
+    if (!text.trim()) return;
     setLoading(true);
     setSummary(null);
+
+    // Decide which API to use:
+    // - If text looks like a CSV with headers/columns → use /api/csv-import (parses metrics)
+    // - If it's a plain list of URLs → use /api/bulk-import (fetches from YouTube API)
+    const lines = text.trim().split("\n");
+    const hasHeaders = lines[0] && /views|likes|url|title|platform|channel|date/i.test(lines[0]);
+    const isCSVWithMetrics = hasHeaders && lines[0].includes(",") || lines[0].includes("\t");
+
     try {
-      const res = await fetch("/api/bulk-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls: parsed, discographyDepth: depth }),
-      });
-      const data: ImportSummary = await res.json();
-      setSummary(data);
+      if (isCSVWithMetrics) {
+        // CSV with actual metrics — parse directly
+        const formData = new FormData();
+        formData.append("csv", new Blob([text], { type: "text/csv" }), "import.csv");
+        const res = await fetch("/api/csv-import", { method: "POST", body: formData });
+        const data = await res.json();
+        setSummary({
+          processed:     data.totalRows ?? 0,
+          addedEntries:  data.indexed ?? 0,
+          totalEntries:  data.totalPool ?? 0,
+          keywordsAdded: data.keywordsAdded ?? 0,
+          hashtagsAdded: data.hashtagsAdded ?? 0,
+          historySaved:  data.indexed ?? 0,
+          totalKeywords: 0,
+          results: (data.results ?? []).map((r: {row:number;status:string;platform:string;title:string;message:string}) => ({
+            url: r.title, status: r.status === "ok" ? "ok" : r.status === "skip" ? "skipped" : "error",
+            platform: r.platform, message: r.message, channelName: "", videoCount: 1,
+          })),
+        });
+      } else {
+        // Plain URL list — fetch full discographies from YouTube API
+        const res = await fetch("/api/bulk-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: parsed, discographyDepth: depth }),
+        });
+        const data: ImportSummary = await res.json();
+        setSummary(data);
+      }
       onComplete();
     } catch (err) {
       console.error(err);
@@ -134,7 +164,8 @@ export default function BulkCSVImportPanel({ onComplete }: BulkCSVImportPanelPro
               { type: "TikTok",     ex: "@handle or tiktok.com/..." },
               { type: "Instagram",  ex: "@handle or instagram.com/..." },
               { type: "YT Shorts",  ex: "youtube.com/shorts/..." },
-              { type: "Plain list", ex: "One URL per line, comma, or tab" },
+              { type: "Metrics CSV",  ex: "URL + views + likes + comments columns" },
+              { type: "URL list",    ex: "One URL/handle per line — fetches from API" },
             ].map(({ type, ex }) => (
               <div key={type} className="flex items-center gap-1.5">
                 <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#60A5FA44", display: "inline-block", flexShrink: 0 }} />
@@ -236,7 +267,7 @@ export default function BulkCSVImportPanel({ onComplete }: BulkCSVImportPanelPro
           <div style={{ background: "rgba(46,204,138,0.04)", border: "1px solid rgba(46,204,138,0.15)", borderRadius: 8, padding: "14px 16px", marginBottom: 16 }}>
             <div className="flex items-center gap-2 mb-2">
               <span className="orbital-loader" style={{ borderTopColor: "#2ECC8A" }} />
-              <span className="font-mono" style={{ fontSize: 11, color: "#2ECC8A" }}>Fetching discographies, computing VRS, extracting keywords…</span>
+              <span className="font-mono" style={{ fontSize: 11, color: "#2ECC8A" }}>Processing CSV — computing VRS, extracting keywords, saving history…</span>
             </div>
             <div className="font-mono" style={{ fontSize: 10, color: "#5E5A57" }}>
               This may take a few minutes for large batches. YouTube API calls are rate-limited.
