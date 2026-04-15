@@ -75,7 +75,6 @@ import CompetitorBankManager from "./CompetitorBankManager";
 import type { Competitor } from "./CompetitorBankManager";
 import CreatorBlocklist from "./CreatorBlocklist";
 import ViewForecastPanel from "./ViewForecastPanel";
-import CursorGlow from "./CursorGlow";
 
 type InputTab = "youtube" | "youtube_short" | "tiktok" | "instagram";
 
@@ -790,62 +789,31 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="flex min-h-screen" style={{ background: "#05050F", color: "#E8E8FF" }}>
-      <CursorGlow />
-      {/* ── Animated Background Orbs ── */}
-      <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
-        <div style={{ position: "absolute", width: 700, height: 700, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.13) 0%, transparent 65%)", top: "-150px", left: "80px", animation: "orbFloat1 22s ease-in-out infinite", filter: "blur(50px)" }} />
-        <div style={{ position: "absolute", width: 550, height: 550, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,212,255,0.11) 0%, transparent 65%)", top: "35%", right: "-80px", animation: "orbFloat2 28s ease-in-out infinite", filter: "blur(55px)" }} />
-        <div style={{ position: "absolute", width: 450, height: 450, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,45,120,0.08) 0%, transparent 65%)", bottom: "80px", left: "28%", animation: "orbFloat3 20s ease-in-out infinite", filter: "blur(60px)" }} />
-        <div style={{ position: "absolute", width: 350, height: 350, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,255,136,0.06) 0%, transparent 65%)", top: "60%", left: "10%", animation: "orbFloat1 32s ease-in-out infinite reverse", filter: "blur(65px)" }} />
-        {/* Dot grid overlay */}
-        <div className="dot-grid-bg" style={{ position: "absolute", inset: 0, opacity: 0.5 }} />
-      </div>
+    <div className="flex min-h-screen" style={{ background: "#000000", color: "#E8E6E1" }}>
+      {/* ── Static dot-grid background ── */}
+      <div className="dot-grid-bg" style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }} />
 
-      {/* ── Aurora top glow ── */}
-      <div className="aurora-top" />
-
-      {/* ── Vignette edge ── */}
-      <div className="vignette-overlay" />
-
-      {/* ── Star fields ── */}
-      <div className="star-layer-a" />
-      <div className="star-layer-b" />
-      <div className="star-layer-c" />
-
-      {/* ── Horizontal grid drift ── */}
-      <div className="grid-drift" />
-
-      {/* ── Diagonal light streaks ── */}
-      <div className="light-streak light-streak-a" />
-      <div className="light-streak light-streak-b" />
-      <div className="light-streak light-streak-c" />
-
-      {/* ── Radar pulse rings ── */}
-      <div className="radar-ring radar-ring-a" />
-      <div className="radar-ring radar-ring-b" />
-      <div className="radar-ring radar-ring-c" />
       {/* ══════════════ LEFT SIDEBAR ══════════════ */}
       <aside
-        className="fixed left-0 top-0 bottom-0 w-[220px] flex flex-col overflow-y-auto z-40"
-        style={{ background: "rgba(6,6,20,0.55)", backdropFilter: "blur(40px) saturate(200%)", WebkitBackdropFilter: "blur(40px) saturate(200%)", borderRight: "1px solid rgba(255,255,255,0.08)", boxShadow: "4px 0 24px rgba(0,0,0,0.5), inset -1px 0 0 rgba(255,255,255,0.04)", zIndex: 40 }}
+        className="fixed left-0 top-0 bottom-0 w-[240px] flex flex-col overflow-y-auto z-40"
+        style={{ background: "#0A0A08", borderRight: "1px solid #1C1C1A", zIndex: 40 }}
       >
         {/* Logo */}
-        <div className="px-4 h-14 flex items-center gap-2.5 shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-extrabold text-black shrink-0"
-            style={{ background: "linear-gradient(135deg, #00D4FF, #7C3AED)" }}>
+        <div className="px-4 h-14 flex items-center gap-2.5 shrink-0" style={{ borderBottom: "1px solid #1C1C1A" }}>
+          <div className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-extrabold shrink-0"
+            style={{ background: "#60A5FA", color: "#000" }}>
             FN
           </div>
-          <span className="text-[13px] font-bold tracking-tight gradient-text-brand">FundedNext Intel</span>
+          <span className="text-[13px] font-semibold tracking-tight gradient-text-brand">FundedNext Intel</span>
         </div>
 
         {/* Platform Nav */}
-        <div className="px-3 pt-4 pb-2">
-          <div className="text-[10px] font-semibold tracking-widest px-2 mb-2" style={{ color: "rgba(0,212,255,0.6)", letterSpacing: "0.15em" }}>PLATFORM</div>
+        <div className="px-2 pt-4 pb-2">
+          <div className="text-[10px] font-semibold tracking-widest px-2 mb-1" style={{ color: "#6B6860", letterSpacing: "0.12em" }}>PLATFORM</div>
           {([
-            { id: "youtube" as InputTab, label: "YT Long Form", icon: "▶", color: "#FF4444" },
-            { id: "youtube_short" as InputTab, label: "YT Shorts", icon: "⚡", color: "#FF0076" },
-            { id: "tiktok" as InputTab, label: "TikTok", icon: "♪", color: "#00f2ea" },
+            { id: "youtube" as InputTab, label: "YT Long-form", icon: "▶", color: "#EF4444" },
+            { id: "youtube_short" as InputTab, label: "YT Shorts", icon: "⚡", color: "#EC4899" },
+            { id: "tiktok" as InputTab, label: "TikTok", icon: "♪", color: "#06B6D4" },
             { id: "instagram" as InputTab, label: "Instagram", icon: "◎", color: "#E1306C" },
           ]).map(({ id, label, icon, color }) => {
             const active = inputTab === id;
@@ -853,78 +821,58 @@ export default function Dashboard() {
               <button
                 key={id}
                 onClick={() => setInputTab(id)}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-medium transition-all text-left mb-0.5"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-all text-left mb-0.5 rounded-md"
                 style={{
-                  background: active ? `color-mix(in srgb, ${color} 15%, transparent)` : "transparent",
-                  color: active ? "#E8E8FF" : "rgba(232,232,255,0.45)",
+                  background: active ? "#111110" : "transparent",
+                  color: active ? "#E8E6E1" : "#6B6860",
+                  borderLeft: active ? `2px solid ${color}` : "2px solid transparent",
                 }}
               >
-                <span style={{ color: active ? color : "#555", fontSize: 11 }}>{icon}</span>
+                <span style={{ color: active ? color : "#3A3835", fontSize: 11 }}>{icon}</span>
                 {label}
-                {active && <span className="ml-auto w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />}
               </button>
             );
           })}
         </div>
 
-        <div className="glass-divider mx-4 my-1" />
+        <div className="glass-divider mx-4 my-2" />
 
         {/* Analysis Modes */}
-        <div className="px-3 py-3">
-          <div className="text-[10px] font-semibold tracking-widest px-2 mb-2" style={{ color: "rgba(124,58,237,0.7)", letterSpacing: "0.15em" }}>ANALYSIS MODES</div>
+        <div className="px-2 py-2">
+          <div className="text-[10px] font-semibold tracking-widest px-2 mb-1" style={{ color: "#6B6860", letterSpacing: "0.12em" }}>ANALYSIS MODES</div>
           <ModeSelector activeModes={activeModes} onToggle={toggleMode} onSelectAll={selectAll} onClear={clearModes} />
         </div>
 
-        <div className="glass-divider mx-4 my-1" />
+        <div className="glass-divider mx-4 my-2" />
 
         {/* Pool Stats */}
         <div className="px-4 py-3">
-          <div className="text-[10px] font-semibold tracking-widest mb-2.5" style={{ color: "rgba(0,255,136,0.6)", letterSpacing: "0.15em" }}>REFERENCE POOL</div>
+          <div className="text-[10px] font-semibold tracking-widest mb-2" style={{ color: "#6B6860", letterSpacing: "0.12em" }}>REFERENCE POOL</div>
           <div className="grid grid-cols-2 gap-1.5">
             {[
-              {
-                value: referenceStore?.entries.filter(e => e.type === "video").length ?? 0,
-                label: "Videos",
-                color: "#00FF88",
-                neon: "neon-green",
-              },
-              {
-                value: referenceStore ? new Set(referenceStore.entries.map(e => e.channelName)).size : 0,
-                label: "Creators",
-                color: "#00D4FF",
-                neon: "neon-cyan",
-              },
-              {
-                value: referenceStore?.entries.filter(e => e.type === "video" && (e.durationSeconds ?? 999) <= 60).length ?? 0,
-                label: "Shorts",
-                color: "#FF0076",
-                neon: "neon-pink",
-              },
-              {
-                value: keywordBank?.categories.niche.length ?? 0,
-                label: "Keywords",
-                color: "#FFB800",
-                neon: "neon-amber",
-              },
-            ].map(({ value, label, color, neon }) => (
-              <div key={label} className="glass-card" style={{ padding: "8px" }}>
-                <div className={`text-[18px] font-bold leading-none ${neon}`} style={{ color }}>
+              { value: referenceStore?.entries.filter(e => e.type === "video").length ?? 0, label: "Videos", color: "#2ECC8A" },
+              { value: referenceStore ? new Set(referenceStore.entries.map(e => e.channelName)).size : 0, label: "Creators", color: "#60A5FA" },
+              { value: referenceStore?.entries.filter(e => e.type === "video" && (e.durationSeconds ?? 999) <= 60).length ?? 0, label: "Shorts", color: "#EC4899" },
+              { value: keywordBank?.categories.niche.length ?? 0, label: "Keywords", color: "#F59E0B" },
+            ].map(({ value, label, color }) => (
+              <div key={label} className="glass-card" style={{ padding: "8px 10px" }}>
+                <div className="text-[18px] font-bold leading-none font-mono" style={{ color, fontFamily: "var(--font-mono)" }}>
                   {typeof value === "number" && value >= 1000 ? `${(value/1000).toFixed(1)}K` : value}
                 </div>
-                <div className="text-[9px] mt-0.5 uppercase tracking-wider" style={{ color: "rgba(232,232,255,0.38)" }}>{label}</div>
+                <div className="text-[9px] mt-0.5 uppercase tracking-wider" style={{ color: "#6B6860" }}>{label}</div>
               </div>
             ))}
           </div>
           {refStoreStatus !== "idle" && (
-            <div className="mt-2 text-[10px] font-medium" style={{ color: "#00D4AA" }}>✓ Saved</div>
+            <div className="mt-2 text-[10px] font-medium" style={{ color: "#2ECC8A" }}>✓ Saved to pool</div>
           )}
         </div>
 
-        <div className="glass-divider mx-4 my-1" />
+        <div className="glass-divider mx-4 my-2" />
 
-        {/* Reverse Engineer — dedicated Mode D entry */}
-        <div className="px-3 py-2">
-          <div className="text-[10px] font-semibold tracking-widest px-2 mb-2" style={{ color: "rgba(255,184,0,0.65)", letterSpacing: "0.15em" }}>TOOLS</div>
+        {/* Reverse Engineer — Tools section */}
+        <div className="px-2 py-2">
+          <div className="text-[10px] font-semibold tracking-widest px-2 mb-1" style={{ color: "#6B6860", letterSpacing: "0.12em" }}>TOOLS</div>
           {(() => {
             const active = activePanel === "reverse-engineer";
             return (
@@ -934,39 +882,32 @@ export default function Dashboard() {
                   setActivePanel(next);
                   if (next === "reverse-engineer" && !activeModes.includes("D")) toggleMode("D");
                 }}
-                className="w-full text-left rounded-xl px-3 py-3 transition-all"
+                className="w-full text-left px-3 py-2.5 rounded-md transition-all"
                 style={{
-                  background: active ? "rgba(255,184,0,0.10)" : "rgba(255,255,255,0.04)",
-                  backdropFilter: "blur(16px)",
-                  WebkitBackdropFilter: "blur(16px)",
-                  border: active ? "1px solid rgba(255,184,0,0.35)" : "1px solid rgba(255,255,255,0.08)",
-                  boxShadow: active ? "0 4px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.14)" : "inset 0 1px 0 rgba(255,255,255,0.06)",
+                  background: active ? "#111110" : "transparent",
+                  color: active ? "#E8E6E1" : "#6B6860",
+                  borderLeft: active ? "2px solid #F59E0B" : "2px solid transparent",
                 }}
               >
                 <div className="flex items-center gap-2.5">
-                  <span className="text-[15px]">⚙</span>
+                  <span className="text-[13px]" style={{ color: active ? "#F59E0B" : "#3A3835" }}>⚙</span>
                   <div className="flex-1">
-                    <div className="text-[12px] font-semibold" style={{ color: active ? "#f1f1f1" : "#ccc" }}>Reverse Engineer</div>
-                    <div className="text-[10px] mt-0.5" style={{ color: "#4A4A7A" }}>Script · Hook · Title · Algorithm</div>
+                    <div className="text-[12px] font-medium" style={{ color: active ? "#E8E6E1" : "#9E9C97" }}>Reverse Engineer</div>
+                    <div className="text-[10px] mt-0.5" style={{ color: "#4A4845" }}>Script · Hook · Title · Algorithm</div>
                   </div>
-                  <span
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                    style={{ background: "rgba(255,159,10,0.15)", color: "#FF9F0A" }}
-                  >
-                    D
-                  </span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: "#1C1C1A", color: "#9E9C97" }}>D</span>
                 </div>
               </button>
             );
           })()}
         </div>
 
-        <div className="glass-divider mx-4 my-1" />
+        <div className="glass-divider mx-4 my-2" />
 
         {/* Nav buttons → open panels in main content */}
-        <div className="px-3 py-2 space-y-0.5">
+        <div className="px-2 py-2 space-y-0.5">
           {([
-            { id: "libraries" as const, label: "Libraries", icon: "◧", desc: "Keywords · Hashtags · Competitors · Blocklist" },
+            { id: "libraries" as const, label: "Libraries", icon: "◧", desc: "Keywords · Hashtags · Competitors" },
             { id: "ref-tools" as const, label: "Reference Tools", icon: "⊞", desc: "Upload · Browse · Build pool" },
           ]).map(({ id, label, icon, desc }) => {
             const active = activePanel === id;
@@ -974,18 +915,18 @@ export default function Dashboard() {
               <button
                 key={id}
                 onClick={() => setActivePanel(active ? null : id)}
-                className="w-full text-left rounded-xl px-3 py-2.5 transition-all"
+                className="w-full text-left px-3 py-2.5 rounded-md transition-all"
                 style={{
-                  background: active ? "rgba(0,212,170,0.1)" : "transparent",
-                  border: active ? "1px solid rgba(0,212,170,0.2)" : "1px solid transparent",
+                  background: active ? "#111110" : "transparent",
+                  borderLeft: active ? "2px solid #60A5FA" : "2px solid transparent",
                 }}
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px]" style={{ color: active ? "#00D4AA" : "#555" }}>{icon}</span>
-                  <span className="text-[12px] font-medium" style={{ color: active ? "#f1f1f1" : "#aaa" }}>{label}</span>
-                  <span className="ml-auto text-[10px]" style={{ color: "#3A3A6A", transform: active ? "rotate(90deg)" : "none", display: "inline-block", transition: "transform 0.2s" }}>›</span>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[13px]" style={{ color: active ? "#60A5FA" : "#3A3835" }}>{icon}</span>
+                  <span className="text-[12px] font-medium" style={{ color: active ? "#E8E6E1" : "#9E9C97" }}>{label}</span>
+                  <span className="ml-auto text-[10px]" style={{ color: "#4A4845", display: "inline-block", transition: "transform 0.15s", transform: active ? "rotate(90deg)" : "none" }}>›</span>
                 </div>
-                <div className="text-[10px] mt-0.5 ml-5" style={{ color: "#4A4A7A" }}>{desc}</div>
+                <div className="text-[10px] mt-0.5 ml-6" style={{ color: "#4A4845" }}>{desc}</div>
               </button>
             );
           })}
@@ -995,12 +936,12 @@ export default function Dashboard() {
       </aside>
 
       {/* ══════════════ MAIN CONTENT ══════════════ */}
-      <main className="flex-1 flex flex-col min-h-screen" style={{ marginLeft: 220 }}>
+      <main className="flex-1 flex flex-col min-h-screen" style={{ marginLeft: 240 }}>
 
         {/* ── Sticky top search bar ── */}
         <div
           className="sticky top-0 z-30 px-6 py-3 flex items-center gap-3"
-          style={{ background: "rgba(5,5,15,0.50)", backdropFilter: "blur(30px) saturate(180%)", WebkitBackdropFilter: "blur(30px) saturate(180%)", borderBottom: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 4px 24px rgba(0,0,0,0.4), inset 0 -1px 0 rgba(255,255,255,0.04)", position: "relative", zIndex: 30 }}
+          style={{ background: "#000000", borderBottom: "1px solid #1C1C1A", position: "relative", zIndex: 30 }}
         >
           {/* Search input — adapts to active platform */}
           {inputTab === "youtube" && (
@@ -1016,8 +957,8 @@ export default function Dashboard() {
                 value={youtubeShortInput}
                 onChange={e => setYoutubeShortInput(e.target.value)}
                 placeholder="https://youtube.com/shorts/VIDEO_ID or @channel"
-                className="flex-1 rounded-xl px-4 py-2.5 text-[13px] outline-none"
-                style={{ color: "#F0F0FF" }}
+                className="glass-input flex-1 rounded-md px-4 py-2.5 text-[13px] outline-none"
+                style={{ color: "#E8E6E1" }}
                 onKeyDown={e => {
                   if (e.key === "Enter" && youtubeShortInput.trim()) {
                     analyze(youtubeShortInput.trim());
@@ -1027,8 +968,8 @@ export default function Dashboard() {
               <button
                 onClick={() => { if (youtubeShortInput.trim()) analyze(youtubeShortInput.trim()); }}
                 disabled={loading || !youtubeShortInput.trim()}
-                className="glass-input rounded-xl px-5 py-2.5 text-[13px] font-semibold shrink-0 transition-opacity"
-                style={{ background: "linear-gradient(135deg, #FF0076, #FF4444)", color: "#fff", opacity: (loading || !youtubeShortInput.trim()) ? 0.4 : 1 }}
+                className="rounded-md px-5 py-2.5 text-[13px] font-semibold shrink-0 transition-opacity"
+                style={{ background: "#EC4899", color: "#fff", opacity: (loading || !youtubeShortInput.trim()) ? 0.4 : 1 }}
               >
                 {loading ? "…" : "Analyze"}
               </button>
@@ -1042,7 +983,7 @@ export default function Dashboard() {
                 value={tiktokInputVal}
                 onChange={e => setTiktokInputVal(e.target.value)}
                 placeholder="https://tiktok.com/@handle or @username"
-                className="glass-input flex-1 rounded-xl px-4 py-2.5 text-[13px]" style={{ color: "#F0F0FF" }}
+                className="glass-input flex-1 rounded-md px-4 py-2.5 text-[13px]" style={{ color: "#E8E6E1" }}
                 onKeyDown={e => {
                   if (e.key === "Enter" && tiktokInputVal.trim()) {
                     const v = tiktokInputVal.trim();
@@ -1056,8 +997,8 @@ export default function Dashboard() {
                   if (v) analyze(v.includes("tiktok.com") ? v : `https://www.tiktok.com/@${v.replace(/^@/, "")}`);
                 }}
                 disabled={loading || !tiktokInputVal.trim()}
-                className="rounded-xl px-5 py-2.5 text-[13px] font-semibold shrink-0 transition-opacity"
-                style={{ background: "#00D4AA", color: "#000", opacity: (loading || !tiktokInputVal.trim()) ? 0.4 : 1 }}
+                className="rounded-md px-5 py-2.5 text-[13px] font-semibold shrink-0 transition-opacity"
+                style={{ background: "#06B6D4", color: "#000", opacity: (loading || !tiktokInputVal.trim()) ? 0.4 : 1 }}
               >
                 {loading ? "…" : "Analyze"}
               </button>
@@ -1074,7 +1015,7 @@ export default function Dashboard() {
                 value={instagramInput}
                 onChange={e => setInstagramInput(e.target.value)}
                 placeholder="@handle or https://instagram.com/reel/..."
-                className="glass-input flex-1 rounded-xl px-4 py-2.5 text-[13px]" style={{ color: "#F0F0FF" }}
+                className="glass-input flex-1 rounded-md px-4 py-2.5 text-[13px]" style={{ color: "#E8E6E1" }}
                 onKeyDown={e => {
                   if (e.key === "Enter" && instagramInput.trim()) {
                     const v = instagramInput.trim();
@@ -1091,16 +1032,16 @@ export default function Dashboard() {
                   analyze(normalized);
                 }}
                 disabled={loading || !instagramInput.trim()}
-                className="rounded-xl px-5 py-2.5 text-[13px] font-semibold shrink-0 transition-opacity"
-                style={{ background: "linear-gradient(135deg,#E1306C,#833AB4)", color: "#fff", opacity: (loading || !instagramInput.trim()) ? 0.4 : 1 }}
+                className="rounded-md px-5 py-2.5 text-[13px] font-semibold shrink-0 transition-opacity"
+                style={{ background: "#E1306C", color: "#fff", opacity: (loading || !instagramInput.trim()) ? 0.4 : 1 }}
               >
                 {loading ? "…" : "Analyze"}
               </button>
               <button
                 onClick={() => saveInstagram(instagramInput.split("\n"))}
                 disabled={!instagramInput.trim()}
-                className="rounded-xl px-4 py-2.5 text-[13px] font-medium shrink-0"
-                style={{ background: "rgba(139,92,246,0.15)", color: "#9090C0", border: "1px solid rgba(139,92,246,0.18)" }}
+                className="rounded-md px-4 py-2.5 text-[13px] font-medium shrink-0"
+                style={{ background: "#111110", color: "#9E9C97", border: "1px solid #252523" }}
               >
                 Queue
               </button>
@@ -1109,17 +1050,17 @@ export default function Dashboard() {
 
           {/* Status / error chips */}
           {status && (
-            <span className="glass-pill text-[11px] shrink-0 px-3 py-1 rounded-full" style={{ color: "#00D4AA" }}>
+            <span className="glass-pill text-[11px] shrink-0 px-3 py-1 rounded-md" style={{ color: "#2ECC8A" }}>
               {status}
             </span>
           )}
           {error && (
-            <span className="glass-pill text-[11px] shrink-0 px-3 py-1 rounded-full" style={{ color: "#FF453A" }}>
+            <span className="glass-pill text-[11px] shrink-0 px-3 py-1 rounded-md" style={{ color: "#EF4444" }}>
               {error}
             </span>
           )}
           {instagramStatus && (
-            <span className="glass-pill text-[11px] shrink-0 px-3 py-1 rounded-full" style={{ color: "#00D4AA" }}>
+            <span className="glass-pill text-[11px] shrink-0 px-3 py-1 rounded-md" style={{ color: "#2ECC8A" }}>
               {instagramStatus}
             </span>
           )}
@@ -1133,11 +1074,11 @@ export default function Dashboard() {
             <div className="space-y-4">
               <div className="grid grid-cols-4 gap-4">
                 {[...Array(4)].map((_, i) => (
-                  <div key={i} className="bracket-card rounded-2xl h-24" style={{ background: `linear-gradient(135deg, rgba(99,102,241,0.08), rgba(0,212,255,0.05))`, border: "1px solid rgba(99,102,241,0.1)", animation: `glowPulse ${1.8 + i * 0.3}s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }} />
+                  <div key={i} className="rounded-lg h-24" style={{ background: "#0D0D0B", border: "1px solid #252523", animation: `glowPulse ${1.8 + i * 0.3}s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }} />
                 ))}
               </div>
-              <div className="rounded-2xl h-48" style={{ background: "linear-gradient(135deg, rgba(124,58,237,0.06), rgba(0,212,255,0.04))", border: "1px solid rgba(99,102,241,0.08)", animation: "glowPulse 2.4s ease-in-out infinite 0.6s" }} />
-              <div className="rounded-2xl h-32" style={{ background: "linear-gradient(135deg, rgba(255,45,120,0.05), rgba(124,58,237,0.06))", border: "1px solid rgba(99,102,241,0.08)", animation: "glowPulse 2.1s ease-in-out infinite 0.9s" }} />
+              <div className="rounded-lg h-48" style={{ background: "#0D0D0B", border: "1px solid #252523", animation: "glowPulse 2.4s ease-in-out infinite 0.6s" }} />
+              <div className="rounded-lg h-32" style={{ background: "#0D0D0B", border: "1px solid #252523", animation: "glowPulse 2.1s ease-in-out infinite 0.9s" }} />
             </div>
           )}
 
@@ -1168,8 +1109,8 @@ export default function Dashboard() {
           {activePanel === "libraries" && (
             <div className="mb-6 space-y-4 fade-up">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-[16px] font-semibold" style={{ color: "#F0F0FF" }}>Libraries</h2>
-                <button onClick={() => setActivePanel(null)} className="text-[11px] px-3 py-1 rounded-lg" style={{ background: "rgba(139,92,246,0.10)", color: "#9090C0" }}>✕ Close</button>
+                <h2 className="text-[15px] font-semibold" style={{ color: "#E8E6E1" }}>Libraries</h2>
+                <button onClick={() => setActivePanel(null)} className="text-[11px] px-3 py-1 rounded-md" style={{ background: "#111110", color: "#9E9C97", border: "1px solid #252523" }}>✕ Close</button>
               </div>
               {keywordBank && <KeywordBankManager bank={keywordBank} onChange={(updated) => setKeywordBank(updated)} />}
               {hashtagBank && <HashtagBankManager bank={hashtagBank} onChange={setHashtagBank} />}
@@ -1181,8 +1122,8 @@ export default function Dashboard() {
           {activePanel === "ref-tools" && (
             <div className="mb-6 space-y-4 fade-up">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-[16px] font-semibold" style={{ color: "#F0F0FF" }}>Reference Tools</h2>
-                <button onClick={() => setActivePanel(null)} className="text-[11px] px-3 py-1 rounded-lg" style={{ background: "rgba(139,92,246,0.10)", color: "#9090C0" }}>✕ Close</button>
+                <h2 className="text-[15px] font-semibold" style={{ color: "#E8E6E1" }}>Reference Tools</h2>
+                <button onClick={() => setActivePanel(null)} className="text-[11px] px-3 py-1 rounded-md" style={{ background: "#111110", color: "#9E9C97", border: "1px solid #252523" }}>✕ Close</button>
               </div>
               <ReferenceUpload onUploadComplete={() => { setRefStoreStatus("saved"); refreshReferenceStore(); }} />
               {referenceStore && referenceStore.entries.length > 0 && (
@@ -1207,24 +1148,24 @@ export default function Dashboard() {
           {/* Empty state */}
           {!result && !loading && activePanel === null && (
             <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-              <div className="text-[64px]" style={{ opacity: 0.12 }}>
+              <div className="text-[56px]" style={{ opacity: 0.08, filter: "grayscale(1)" }}>
                 {inputTab === "youtube" ? "▶" : inputTab === "tiktok" ? "♪" : "◎"}
               </div>
               <div className="text-center">
-                <div className="text-[20px] font-semibold mb-2" style={{ color: "#F0F0FF" }}>
-                  {inputTab === "youtube" ? "Analyze any YouTube video or channel" : inputTab === "tiktok" ? "Analyze TikTok creators" : "Analyze Instagram accounts"}
+                <div className="text-[18px] font-semibold mb-2" style={{ color: "#E8E6E1" }}>
+                  {inputTab === "youtube" ? "Analyze any YouTube video or channel" : inputTab === "tiktok" ? "Analyze TikTok creators" : inputTab === "youtube_short" ? "Analyze YouTube Shorts" : "Analyze Instagram accounts"}
                 </div>
-                <div className="text-[13px] max-w-[380px] leading-relaxed" style={{ color: "#7878A8" }}>
-                  {inputTab === "youtube" ? "Paste a video URL, channel URL, or @handle above. Get view forecast, virality score, and growth signals." : inputTab === "tiktok" ? "Enter a handle or profile URL to pull creator analytics and virality signals." : "Enter a handle or reel URL to pull Instagram analytics."}
+                <div className="text-[13px] max-w-[400px] leading-relaxed" style={{ color: "#6B6860" }}>
+                  {inputTab === "youtube" ? "Paste a video URL, channel URL, or @handle above. Get view forecast, virality score, and growth signals." : inputTab === "tiktok" ? "Enter a handle or profile URL to pull creator analytics and virality signals." : inputTab === "youtube_short" ? "Paste a Shorts URL or @channel to analyze short-form performance." : "Enter a handle or reel URL to pull Instagram analytics."}
                 </div>
               </div>
               {/* Quick stat cards when pool has data */}
               {referenceStore && referenceStore.entries.length > 0 && (
                 <div className="mt-4 grid grid-cols-3 gap-3 w-full max-w-lg">
                   {[
-                    { label: "Videos in Pool", value: referenceStore.entries.length, color: "#00D4AA", tip: "Total reference videos analyzed" },
-                    { label: "Avg Views", value: Math.round(referenceStore.entries.reduce((s, e) => s + (e.metrics?.views || 0), 0) / Math.max(referenceStore.entries.length, 1)).toLocaleString(), color: "#0A84FF", tip: "Mean views across the reference pool" },
-                    { label: "Creators", value: new Set(referenceStore.entries.map(e => e.channelName)).size, color: "#FF9F0A", tip: "Unique creators tracked" },
+                    { label: "Videos in Pool", value: referenceStore.entries.length, color: "#2ECC8A", tip: "Total reference videos analyzed" },
+                    { label: "Avg Views", value: Math.round(referenceStore.entries.reduce((s, e) => s + (e.metrics?.views || 0), 0) / Math.max(referenceStore.entries.length, 1)).toLocaleString(), color: "#60A5FA", tip: "Mean views across the reference pool" },
+                    { label: "Creators", value: new Set(referenceStore.entries.map(e => e.channelName)).size, color: "#F59E0B", tip: "Unique creators tracked" },
                   ].map(({ label, value, color, tip }) => (
                     <div
                       key={label}
@@ -1232,8 +1173,8 @@ export default function Dashboard() {
                       className="glass-card cursor-default"
                       style={{ padding: "16px" }}
                     >
-                      <div className="text-[22px] font-bold" style={{ color }}>{value}</div>
-                      <div className="text-[11px] mt-0.5" style={{ color: "#7878A8" }}>{label}</div>
+                      <div className="text-[22px] font-bold font-mono" style={{ color, fontFamily: "var(--font-mono)" }}>{value}</div>
+                      <div className="text-[11px] mt-0.5" style={{ color: "#6B6860" }}>{label}</div>
                     </div>
                   ))}
                 </div>
@@ -1246,12 +1187,12 @@ export default function Dashboard() {
             const v = result.video;
             const ch = result.channel;
             const metrics = [
-              { label: "Total Views", value: v.views.toLocaleString(), color: "#00D4AA", tip: "Total lifetime views on this video" },
-              { label: "Likes", value: v.likes.toLocaleString(), color: "#0A84FF", tip: "Total likes" },
-              { label: "Engagement", value: `${v.engagement.toFixed(2)}%`, color: "#FF9F0A", tip: "Likes + comments as % of views" },
-              { label: "Velocity", value: `${v.velocity.toLocaleString()}/d`, color: "#BF5AF2", tip: "Average views per day since publish" },
-              ...(ch ? [{ label: "Subscribers", value: (ch.subs / 1000).toFixed(0) + "K", color: "#FF453A", tip: "Channel subscriber count" }] : []),
-              ...(ch ? [{ label: "Ch. Median", value: result.channelMedian.toLocaleString(), color: "#30D158", tip: "Median views per video on this channel" }] : []),
+              { label: "Total Views", value: v.views.toLocaleString(), color: "#2ECC8A", tip: "Total lifetime views on this video" },
+              { label: "Likes", value: v.likes.toLocaleString(), color: "#60A5FA", tip: "Total likes" },
+              { label: "Engagement", value: `${v.engagement.toFixed(2)}%`, color: "#F59E0B", tip: "Likes + comments as % of views" },
+              { label: "Velocity", value: `${v.velocity.toLocaleString()}/d`, color: "#6366F1", tip: "Average views per day since publish" },
+              ...(ch ? [{ label: "Subscribers", value: (ch.subs / 1000).toFixed(0) + "K", color: "#EF4444", tip: "Channel subscriber count" }] : []),
+              ...(ch ? [{ label: "Ch. Median", value: result.channelMedian.toLocaleString(), color: "#06B6D4", tip: "Median views per video on this channel" }] : []),
             ];
             return (
               <div className="space-y-5">
@@ -1264,8 +1205,8 @@ export default function Dashboard() {
                       className="glass-card cursor-default"
                       style={{ padding: "16px" }}
                     >
-                      <div className="text-[11px] mb-1.5" style={{ color: "#7878A8" }}>{label}</div>
-                      <div className="text-[22px] font-bold leading-none" style={{ color }}>{value}</div>
+                      <div className="text-[11px] mb-1.5" style={{ color: "#6B6860" }}>{label}</div>
+                      <div className="text-[22px] font-bold leading-none font-mono" style={{ color, fontFamily: "var(--font-mono)" }}>{value}</div>
                     </div>
                   ))}
                 </div>
@@ -1318,11 +1259,11 @@ export default function Dashboard() {
             const avgEng = videos.reduce((s, v) => s + v.engagement, 0) / Math.max(videos.length, 1);
             const topVideo = videos[0];
             const batchMetrics = [
-              { label: "Videos Analyzed", value: videos.length.toLocaleString(), color: "#00D4AA", tip: "Number of posts scraped" },
-              { label: "Total Views", value: (totalViews / 1000).toFixed(0) + "K", color: "#0A84FF", tip: "Combined view count across all videos" },
-              { label: "Avg Engagement", value: `${avgEng.toFixed(2)}%`, color: "#FF9F0A", tip: "Average engagement rate across all posts" },
-              { label: "Top Views", value: topVideo ? (topVideo.views / 1000).toFixed(0) + "K" : "—", color: "#BF5AF2", tip: "Highest view count in this batch" },
-              { label: "Creators", value: new Set(videos.map(v => v.channel)).size.toLocaleString(), color: "#FF453A", tip: "Unique creators in this batch" },
+              { label: "Videos Analyzed", value: videos.length.toLocaleString(), color: "#2ECC8A", tip: "Number of posts scraped" },
+              { label: "Total Views", value: (totalViews / 1000).toFixed(0) + "K", color: "#60A5FA", tip: "Combined view count across all videos" },
+              { label: "Avg Engagement", value: `${avgEng.toFixed(2)}%`, color: "#F59E0B", tip: "Average engagement rate across all posts" },
+              { label: "Top Views", value: topVideo ? (topVideo.views / 1000).toFixed(0) + "K" : "—", color: "#6366F1", tip: "Highest view count in this batch" },
+              { label: "Creators", value: new Set(videos.map(v => v.channel)).size.toLocaleString(), color: "#EF4444", tip: "Unique creators in this batch" },
             ];
             return (
               <div className="space-y-5">
@@ -1335,8 +1276,8 @@ export default function Dashboard() {
                       className="glass-card cursor-default"
                       style={{ padding: "16px" }}
                     >
-                      <div className="text-[11px] mb-1.5" style={{ color: "#7878A8" }}>{label}</div>
-                      <div className="text-[22px] font-bold leading-none" style={{ color }}>{value}</div>
+                      <div className="text-[11px] mb-1.5" style={{ color: "#6B6860" }}>{label}</div>
+                      <div className="text-[22px] font-bold leading-none font-mono" style={{ color, fontFamily: "var(--font-mono)" }}>{value}</div>
                     </div>
                   ))}
                 </div>
