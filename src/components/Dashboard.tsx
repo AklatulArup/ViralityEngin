@@ -1035,7 +1035,7 @@ export default function Dashboard() {
         {/* ── Sticky topbar ── */}
         <div
           className="glass-nav sticky top-0 z-30 flex items-center gap-3 px-5"
-          style={{ height: 56, minHeight: 56 }}
+          style={{ height: 68, minHeight: 68, paddingTop: 4, paddingBottom: 4 }}
         >
           {/* ── Sidebar toggle ── */}
           <button
@@ -1071,33 +1071,33 @@ export default function Dashboard() {
           )}
 
           {inputTab === "youtube_short" && (
-            <div className="flex-1 flex gap-2 items-center">
+            <div className="flex-1 flex gap-2.5 items-center">
               <div
-                className="flex-1 flex items-center gap-2 rounded-[9px] px-3.5"
-                style={{
-                  background: "rgba(0,0,0,0.6)", backdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-                }}
+                className="flex-1 flex items-center gap-3 rounded-xl overflow-hidden transition-all duration-200"
+                style={{ height: 44, padding: "0 14px", background: "rgba(4,4,2,0.90)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 12px rgba(0,0,0,0.4)" }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="#EC4899" opacity={0.6}>
-                  <rect x="2" y="2" width="20" height="20" rx="4" fill="currentColor" fillOpacity=".2" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M9.75 15.52V8.48L15.85 12l-6.1 3.52z" fill="#EC4899"/>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#EC4899" style={{ flexShrink: 0, opacity: 0.8 }}>
+                  <rect x="2" y="2" width="20" height="20" rx="4" fill="currentColor" fillOpacity=".15" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M9.75 15.52V8.48L15.85 12l-6.1 3.52z"/>
                 </svg>
-                <input
-                  type="text" value={youtubeShortInput}
+                <input type="text" value={youtubeShortInput}
                   onChange={e => setYoutubeShortInput(e.target.value)}
-                  placeholder="YouTube Shorts URL or @channel..."
-                  className="flex-1 bg-transparent border-none outline-none text-[13px] py-2.5"
-                  style={{ color: "#E8E6E1", caretColor: "#EC4899" }}
+                  placeholder="YouTube Shorts URL or @channel…"
+                  className="flex-1 bg-transparent border-none outline-none"
+                  style={{ fontSize: 13.5, color: "#E8E6E1", caretColor: "#EC4899" }}
                   onKeyDown={e => { if (e.key === "Enter" && youtubeShortInput.trim()) analyze(youtubeShortInput.trim()); }}
                 />
               </div>
               <button
                 onClick={() => { if (youtubeShortInput.trim()) analyze(youtubeShortInput.trim()); }}
                 disabled={loading || !youtubeShortInput.trim()}
-                className="btn-cosmic shrink-0"
-                style={{ background: "linear-gradient(135deg, #BE185D, #EC4899)", height: 40, padding: "0 20px" }}
+                className="shrink-0 flex items-center gap-2 font-semibold rounded-xl"
+                style={{ height: 44, padding: "0 22px", fontSize: 13, cursor: loading || !youtubeShortInput.trim() ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, transition: "all 0.2s",
+                  background: youtubeShortInput.trim() ? "linear-gradient(135deg, #BE185D, #EC4899)" : "rgba(255,255,255,0.06)",
+                  color: youtubeShortInput.trim() ? "#fff" : "#4A4845",
+                  border: youtubeShortInput.trim() ? "1px solid rgba(236,72,153,0.45)" : "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: youtubeShortInput.trim() ? "inset 0 1px 0 rgba(255,255,255,0.22), 0 0 20px rgba(236,72,153,0.55), 0 0 60px rgba(236,72,153,0.22)" : "none",
+                }}
               >
                 {loading ? <span className="orbital-loader" style={{ borderTopColor: "#EC4899" }} /> : "Analyze"}
               </button>
@@ -1105,23 +1105,19 @@ export default function Dashboard() {
           )}
 
           {inputTab === "tiktok" && (
-            <div className="flex-1 flex gap-2 items-center">
+            <div className="flex-1 flex gap-2.5 items-center">
               <div
-                className="flex-1 flex items-center gap-2 rounded-[9px] px-3.5"
-                style={{
-                  background: "rgba(0,0,0,0.6)", backdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
+                className="flex-1 flex items-center gap-3 rounded-xl overflow-hidden transition-all duration-200"
+                style={{ height: 44, padding: "0 14px", background: "rgba(4,4,2,0.90)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 12px rgba(0,0,0,0.4)" }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="#06B6D4" opacity={0.7}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#06B6D4" style={{ flexShrink: 0, opacity: 0.85 }}>
                   <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.87a8.17 8.17 0 0 0 4.77 1.52V7a4.85 4.85 0 0 1-1-.31z"/>
                 </svg>
-                <input
-                  type="text" value={tiktokInputVal}
+                <input type="text" value={tiktokInputVal}
                   onChange={e => setTiktokInputVal(e.target.value)}
-                  placeholder="@handle or tiktok.com/..."
-                  className="flex-1 bg-transparent border-none outline-none text-[13px] py-2.5"
-                  style={{ color: "#E8E6E1", caretColor: "#06B6D4" }}
+                  placeholder="@handle or tiktok.com/…"
+                  className="flex-1 bg-transparent border-none outline-none"
+                  style={{ fontSize: 13.5, color: "#E8E6E1", caretColor: "#06B6D4" }}
                   onKeyDown={e => {
                     if (e.key === "Enter" && tiktokInputVal.trim()) {
                       const v = tiktokInputVal.trim();
@@ -1131,13 +1127,15 @@ export default function Dashboard() {
                 />
               </div>
               <button
-                onClick={() => {
-                  const v = tiktokInputVal.trim();
-                  if (v) analyze(v.includes("tiktok.com") ? v : `https://www.tiktok.com/@${v.replace(/^@/, "")}`);
-                }}
+                onClick={() => { const v = tiktokInputVal.trim(); if (v) analyze(v.includes("tiktok.com") ? v : `https://www.tiktok.com/@${v.replace(/^@/, "")}`); }}
                 disabled={loading || !tiktokInputVal.trim()}
-                className="btn-cosmic shrink-0"
-                style={{ background: "linear-gradient(135deg, #0E7490, #06B6D4)", color: "#000", height: 40, padding: "0 20px" }}
+                className="shrink-0 flex items-center gap-2 font-semibold rounded-xl"
+                style={{ height: 44, padding: "0 22px", fontSize: 13, cursor: loading || !tiktokInputVal.trim() ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, transition: "all 0.2s",
+                  background: tiktokInputVal.trim() ? "linear-gradient(135deg, #0E7490, #06B6D4)" : "rgba(255,255,255,0.06)",
+                  color: tiktokInputVal.trim() ? "#000" : "#4A4845",
+                  border: tiktokInputVal.trim() ? "1px solid rgba(6,182,212,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: tiktokInputVal.trim() ? "inset 0 1px 0 rgba(255,255,255,0.3), 0 0 20px rgba(6,182,212,0.60), 0 0 60px rgba(6,182,212,0.25)" : "none",
+                }}
               >
                 {loading ? <span className="orbital-loader" style={{ borderTopColor: "#06B6D4" }} /> : "Analyze"}
               </button>
@@ -1148,23 +1146,19 @@ export default function Dashboard() {
           )}
 
           {inputTab === "instagram" && (
-            <div className="flex-1 flex gap-2 items-center">
+            <div className="flex-1 flex gap-2.5 items-center">
               <div
-                className="flex-1 flex items-center gap-2 rounded-[9px] px-3.5"
-                style={{
-                  background: "rgba(0,0,0,0.6)", backdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
+                className="flex-1 flex items-center gap-3 rounded-xl overflow-hidden transition-all duration-200"
+                style={{ height: 44, padding: "0 14px", background: "rgba(4,4,2,0.90)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 12px rgba(0,0,0,0.4)" }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E1306C" strokeWidth="1.8" opacity={0.7}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E1306C" strokeWidth="1.8" style={{ flexShrink: 0, opacity: 0.85 }}>
                   <rect x="2" y="2" width="20" height="20" rx="5.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="18.5" cy="5.5" r="1.5" fill="#E1306C"/>
                 </svg>
-                <input
-                  type="text" value={instagramInput}
+                <input type="text" value={instagramInput}
                   onChange={e => setInstagramInput(e.target.value)}
-                  placeholder="@handle or instagram.com/reel/..."
-                  className="flex-1 bg-transparent border-none outline-none text-[13px] py-2.5"
-                  style={{ color: "#E8E6E1", caretColor: "#E1306C" }}
+                  placeholder="@handle or instagram.com/reel/…"
+                  className="flex-1 bg-transparent border-none outline-none"
+                  style={{ fontSize: 13.5, color: "#E8E6E1", caretColor: "#E1306C" }}
                   onKeyDown={e => {
                     if (e.key === "Enter" && instagramInput.trim()) {
                       const v = instagramInput.trim();
@@ -1174,14 +1168,15 @@ export default function Dashboard() {
                 />
               </div>
               <button
-                onClick={() => {
-                  const v = instagramInput.trim();
-                  if (!v) return;
-                  analyze(v.includes("instagram.com") ? v : `https://www.instagram.com/${v.replace(/^@/, "")}/`);
-                }}
+                onClick={() => { const v = instagramInput.trim(); if (!v) return; analyze(v.includes("instagram.com") ? v : `https://www.instagram.com/${v.replace(/^@/, "")}/`); }}
                 disabled={loading || !instagramInput.trim()}
-                className="btn-cosmic shrink-0"
-                style={{ background: "linear-gradient(135deg, #9D174D, #E1306C)", height: 40, padding: "0 20px" }}
+                className="shrink-0 flex items-center gap-2 font-semibold rounded-xl"
+                style={{ height: 44, padding: "0 22px", fontSize: 13, cursor: loading || !instagramInput.trim() ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, transition: "all 0.2s",
+                  background: instagramInput.trim() ? "linear-gradient(135deg, #9D174D, #E1306C)" : "rgba(255,255,255,0.06)",
+                  color: instagramInput.trim() ? "#fff" : "#4A4845",
+                  border: instagramInput.trim() ? "1px solid rgba(225,48,108,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: instagramInput.trim() ? "inset 0 1px 0 rgba(255,255,255,0.22), 0 0 20px rgba(225,48,108,0.55), 0 0 60px rgba(225,48,108,0.22)" : "none",
+                }}
               >
                 {loading ? <span className="orbital-loader" style={{ borderTopColor: "#E1306C" }} /> : "Analyze"}
               </button>
@@ -1189,7 +1184,7 @@ export default function Dashboard() {
                 onClick={() => saveInstagram(instagramInput.split("\n"))}
                 disabled={!instagramInput.trim()}
                 className="btn-ghost shrink-0"
-                style={{ height: 40, padding: "0 14px" }}
+                style={{ height: 44, padding: "0 14px" }}
               >
                 Queue
               </button>
