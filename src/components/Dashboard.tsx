@@ -87,6 +87,7 @@ import CompetitorBankManager from "./CompetitorBankManager";
 import type { Competitor } from "./CompetitorBankManager";
 import CreatorBlocklist from "./CreatorBlocklist";
 import ViewForecastPanel from "./ViewForecastPanel";
+import BulkCSVImportPanel from "./BulkCSVImportPanel";
 import StarfieldCanvas from "./StarfieldCanvas";
 import CursorGlow from "./CursorGlow";
 import MetricCard from "./MetricCard";
@@ -141,7 +142,7 @@ export default function Dashboard() {
   const [instagramStatus, setInstagramStatus] = useState("");
   const [tiktokInputVal, setTiktokInputVal] = useState("");
   const [youtubeShortInput, setYoutubeShortInput] = useState("");
-  const [activePanel, setActivePanel] = useState<"libraries" | "ref-tools" | "reverse-engineer" | null>(null);
+  const [activePanel, setActivePanel] = useState<"libraries" | "ref-tools" | "reverse-engineer" | "bulk-import" | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [history, setHistory]   = useState<HistoryEntry[]>([]);
   const [historyPanel, setHistoryPanel] = useState(false);
@@ -1066,6 +1067,26 @@ export default function Dashboard() {
             );
           })()}
 
+          {/* Bulk CSV Import */}
+          {(() => {
+            const active = activePanel === "bulk-import";
+            return (
+              <button
+                onClick={() => setActivePanel(active ? null : "bulk-import" as typeof activePanel)}
+                className="nav-item w-full text-left px-3 py-2.5 rounded-lg mb-0.5 cursor-pointer"
+                style={{ borderLeftColor: active ? "#2ECC8A" : "transparent", boxShadow: active ? "0 0 16px rgba(46,204,138,0.06)" : "none" }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span style={{ color: active ? "#2ECC8A" : "#3A3835", fontSize: 13 }}>⬆</span>
+                  <div className="flex-1">
+                    <div style={{ fontSize: 12, fontWeight: 500, color: active ? "#E8E6E1" : "#9E9C97" }}>Bulk CSV Import</div>
+                    <div style={{ fontSize: 10, color: "#5E5A57", marginTop: 1 }}>Creators · Videos · History</div>
+                  </div>
+                </div>
+              </button>
+            );
+          })()}
+
           {/* Libraries / Reference Tools */}
           {([ 
             { id: "libraries" as const,  label: "Libraries",       icon: "◧", desc: "Keywords · Tags · Competitors" },
@@ -1336,6 +1357,22 @@ export default function Dashboard() {
                 }}
                 onRetry={() => { if (lastUrl) analyze(lastUrl); }}
               />
+            </div>
+          )}
+
+          {/* ── Bulk CSV Import panel ── */}
+          {!loading && activePanel === ("bulk-import" as typeof activePanel) && (
+            <div className="mb-5 fade-up">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="font-semibold" style={{ fontSize: 15, color: "#E8E6E1" }}>Bulk CSV Import</h2>
+                  <p className="font-mono" style={{ fontSize: 10, color: "#5E5A57", marginTop: 2, letterSpacing: "0.06em" }}>
+                    IMPORT · ENRICH · SAVE ALL HISTORICAL DATA
+                  </p>
+                </div>
+                <button onClick={() => setActivePanel(null)} className="btn-ghost">✕ Close</button>
+              </div>
+              <BulkCSVImportPanel onComplete={() => { setRefStoreStatus("saved"); refreshReferenceStore(); }} />
             </div>
           )}
 
