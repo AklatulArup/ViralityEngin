@@ -130,6 +130,7 @@ export default function Dashboard() {
   const [tiktokInputVal, setTiktokInputVal] = useState("");
   const [youtubeShortInput, setYoutubeShortInput] = useState("");
   const [activePanel, setActivePanel] = useState<"libraries" | "ref-tools" | "reverse-engineer" | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Extra analysis results for video mode
   const [adjacentCtx, setAdjacentCtx] = useState<AdjacentVideoContext | null>(null);
@@ -830,7 +831,7 @@ export default function Dashboard() {
       ══════════════════════════════════════ */}
       <aside
         className="glass-deep fixed left-0 top-0 bottom-0 flex flex-col z-40"
-        style={{ width: 240, overflowY: "auto", overflowX: "hidden" }}
+        style={{ width: sidebarOpen ? 240 : 0, minWidth: 0, overflowY: sidebarOpen ? "auto" : "hidden", overflowX: "hidden", transition: "width 0.28s cubic-bezier(0.16,1,0.3,1)", visibility: sidebarOpen ? "visible" : "hidden" }}
       >
         {/* ── Logo ── */}
         <div
@@ -852,7 +853,7 @@ export default function Dashboard() {
             <div className="gradient-text-brand font-semibold" style={{ fontSize: 13, letterSpacing: "-0.02em" }}>
               FundedNext Intel
             </div>
-            <div className="font-mono" style={{ fontSize: 8, color: "#4A4845", letterSpacing: "0.1em" }}>
+            <div className="font-mono" style={{ fontSize: 8, color: "#5E5A57", letterSpacing: "0.1em" }}>
               PLATFORM INTELLIGENCE
             </div>
           </div>
@@ -860,7 +861,7 @@ export default function Dashboard() {
 
         {/* ── Platform ── */}
         <div className="px-2 pt-4 pb-2">
-          <div className="font-mono px-2 mb-2" style={{ fontSize: 9, color: "#4A4845", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+          <div className="font-mono px-2 mb-2" style={{ fontSize: 9, color: "#5E5A57", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Platform
           </div>
           {PLATFORMS.map(({ id, label, color, icon }) => {
@@ -896,7 +897,7 @@ export default function Dashboard() {
 
         {/* ── Analysis Modes ── */}
         <div className="px-2 py-2">
-          <div className="font-mono px-2 mb-2" style={{ fontSize: 9, color: "#4A4845", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+          <div className="font-mono px-2 mb-2" style={{ fontSize: 9, color: "#5E5A57", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Analysis Modes
           </div>
           <ModeSelector activeModes={activeModes} onToggle={toggleMode} onSelectAll={selectAll} onClear={clearModes} />
@@ -906,7 +907,7 @@ export default function Dashboard() {
 
         {/* ── Reference Pool ── */}
         <div className="px-4 py-3">
-          <div className="font-mono mb-2" style={{ fontSize: 9, color: "#4A4845", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+          <div className="font-mono mb-2" style={{ fontSize: 9, color: "#5E5A57", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Reference Pool
           </div>
           <div className="grid grid-cols-2 gap-1.5">
@@ -922,11 +923,11 @@ export default function Dashboard() {
               >
                 <div
                   className="font-mono font-bold leading-none"
-                  style={{ fontSize: 17, color, textShadow: `0 0 8px ${color}44` }}
+                  style={{ fontSize: 17, color, textShadow: `0 0 12px ${color}BB, 0 0 24px ${color}55` }}
                 >
                   {typeof value === "number" && value >= 1000 ? `${(value/1000).toFixed(1)}K` : value}
                 </div>
-                <div className="font-mono mt-0.5" style={{ fontSize: 9, color: "#6B6860", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                <div className="font-mono mt-0.5" style={{ fontSize: 9, color: "#8A8885", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   {label}
                 </div>
               </div>
@@ -943,7 +944,7 @@ export default function Dashboard() {
 
         {/* ── Tools ── */}
         <div className="px-2 py-2">
-          <div className="font-mono px-2 mb-2" style={{ fontSize: 9, color: "#4A4845", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+          <div className="font-mono px-2 mb-2" style={{ fontSize: 9, color: "#5E5A57", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Tools
           </div>
 
@@ -967,7 +968,7 @@ export default function Dashboard() {
                   <span style={{ color: active ? "#F59E0B" : "#3A3835", fontSize: 14 }}>⚙</span>
                   <div className="flex-1">
                     <div style={{ fontSize: 12, fontWeight: 500, color: active ? "#E8E6E1" : "#9E9C97" }}>Reverse Engineer</div>
-                    <div style={{ fontSize: 10, color: "#4A4845", marginTop: 1 }}>Script · Hook · Title</div>
+                    <div style={{ fontSize: 10, color: "#5E5A57", marginTop: 1 }}>Script · Hook · Title</div>
                   </div>
                   <span
                     className="font-mono"
@@ -1003,7 +1004,7 @@ export default function Dashboard() {
                   <span style={{ color: active ? "#60A5FA" : "#3A3835", fontSize: 14 }}>{icon}</span>
                   <div className="flex-1">
                     <div style={{ fontSize: 12, fontWeight: 500, color: active ? "#E8E6E1" : "#9E9C97" }}>{label}</div>
-                    <div style={{ fontSize: 10, color: "#4A4845", marginTop: 1 }}>{desc}</div>
+                    <div style={{ fontSize: 10, color: "#5E5A57", marginTop: 1 }}>{desc}</div>
                   </div>
                   <span style={{
                     fontSize: 12, color: active ? "#60A5FA" : "#3A3835",
@@ -1020,7 +1021,7 @@ export default function Dashboard() {
 
         {/* ── Footer ── */}
         <div className="px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-          <div className="font-mono" style={{ fontSize: 9, color: "#4A4845", letterSpacing: "0.08em" }}>
+          <div className="font-mono" style={{ fontSize: 9, color: "#5E5A57", letterSpacing: "0.08em" }}>
             FUNDEDNEXT · INTERNAL
           </div>
         </div>
@@ -1029,13 +1030,25 @@ export default function Dashboard() {
       {/* ══════════════════════════════════════
           MAIN CONTENT — offset 240px
       ══════════════════════════════════════ */}
-      <main className="flex-1 flex flex-col min-h-screen" style={{ marginLeft: 240, position: "relative", zIndex: 2 }}>
+      <main className="flex-1 flex flex-col min-h-screen" style={{ marginLeft: sidebarOpen ? 240 : 0, transition: "margin-left 0.28s cubic-bezier(0.16,1,0.3,1)", position: "relative", zIndex: 2 }}>
 
         {/* ── Sticky topbar ── */}
         <div
           className="glass-nav sticky top-0 z-30 flex items-center gap-3 px-5"
           style={{ height: 56, minHeight: 56 }}
         >
+          {/* ── Sidebar toggle ── */}
+          <button
+            onClick={() => setSidebarOpen(o => !o)}
+            className="shrink-0 flex flex-col gap-1 cursor-pointer rounded-md p-2 halo-blue"
+            title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", transition: "all 0.15s" }}
+          >
+            <span style={{ display: "block", width: sidebarOpen ? 14 : 10, height: 1.5, background: "#9E9C97", borderRadius: 99, transition: "width 0.2s" }} />
+            <span style={{ display: "block", width: 14, height: 1.5, background: "#9E9C97", borderRadius: 99 }} />
+            <span style={{ display: "block", width: sidebarOpen ? 10 : 14, height: 1.5, background: "#9E9C97", borderRadius: 99, transition: "width 0.2s" }} />
+          </button>
+
           {/* Platform badge */}
           <div
             className="shrink-0 flex items-center gap-1.5 font-mono font-semibold rounded-lg px-2.5 py-1.5"
@@ -1209,7 +1222,7 @@ export default function Dashboard() {
             <div className="space-y-4 fade-up">
               <div className="flex items-center gap-2 mb-5">
                 <span className="orbital-loader" />
-                <span className="font-mono text-[11px]" style={{ color: "#6B6860" }}>
+                <span className="font-mono text-[11px]" style={{ color: "#8A8885" }}>
                   {status || "Fetching data…"}
                 </span>
               </div>
@@ -1255,7 +1268,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-1">
                 <div>
                   <h2 className="font-semibold" style={{ fontSize: 15, color: "#E8E6E1" }}>Libraries</h2>
-                  <p className="font-mono" style={{ fontSize: 10, color: "#4A4845", marginTop: 2, letterSpacing: "0.06em" }}>
+                  <p className="font-mono" style={{ fontSize: 10, color: "#5E5A57", marginTop: 2, letterSpacing: "0.06em" }}>
                     KEYWORDS · HASHTAGS · COMPETITORS · BLOCKLIST
                   </p>
                 </div>
@@ -1274,7 +1287,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-1">
                 <div>
                   <h2 className="font-semibold" style={{ fontSize: 15, color: "#E8E6E1" }}>Reference Tools</h2>
-                  <p className="font-mono" style={{ fontSize: 10, color: "#4A4845", marginTop: 2, letterSpacing: "0.06em" }}>
+                  <p className="font-mono" style={{ fontSize: 10, color: "#5E5A57", marginTop: 2, letterSpacing: "0.06em" }}>
                     UPLOAD · BROWSE · BUILD POOL
                   </p>
                 </div>
@@ -1360,9 +1373,9 @@ export default function Dashboard() {
                   }} />
                   <div className="ticker-inner" style={{ gap: 0 }}>
                     {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-                      <span key={i} className="font-mono flex items-center gap-2" style={{ fontSize: 10, padding: "0 24px" }}>
-                        <span style={{ color: "#4A4845" }}>◆</span>
-                        <span style={{ color: "#6B6860", letterSpacing: "0.08em" }}>{item.label}</span>
+                      <span key={i} className="font-mono flex items-center gap-2" style={{ fontSize: 10, padding: "0 24px", opacity: 0.95 }}>
+                        <span style={{ color: "#5E5A57" }}>◆</span>
+                        <span style={{ color: "#8A8885", letterSpacing: "0.08em" }}>{item.label}</span>
                         <span style={{ color: item.color, fontWeight: 700 }}>{item.value}</span>
                       </span>
                     ))}
@@ -1370,7 +1383,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* ── Row 1: Pool Intel + Ring Chart ── */}
-                <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+                <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
 
                   {/* Pool Health Ring */}
                   <div className="glass-card scanline-card" style={{ padding: "20px 24px" }}>
@@ -1383,21 +1396,21 @@ export default function Dashboard() {
                         <circle cx="50" cy="50" r="45" fill="none" stroke="#EF4444" strokeWidth="8"
                           strokeDasharray={`${ytPct * C} ${C}`}
                           strokeDashoffset="0" strokeLinecap="round"
-                          style={{ filter: "drop-shadow(0 0 6px #EF444488)", transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1)" }}
+                          style={{ filter: "drop-shadow(0 0 10px #EF4444BB)", transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1)" }}
                         />
                         {/* TikTok arc */}
                         <circle cx="50" cy="50" r="45" fill="none" stroke="#06B6D4" strokeWidth="8"
                           strokeDasharray={`${ttPct * C} ${C}`}
                           strokeDashoffset={`${-(ytPct * C)}`}
                           strokeLinecap="round"
-                          style={{ filter: "drop-shadow(0 0 6px #06B6D488)", transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1) 0.1s" }}
+                          style={{ filter: "drop-shadow(0 0 10px #06B6D4BB)", transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1) 0.1s" }}
                         />
                         {/* IG arc */}
                         <circle cx="50" cy="50" r="45" fill="none" stroke="#E1306C" strokeWidth="8"
                           strokeDasharray={`${igPct * C} ${C}`}
                           strokeDashoffset={`${-((ytPct + ttPct) * C)}`}
                           strokeLinecap="round"
-                          style={{ filter: "drop-shadow(0 0 6px #E1306C88)", transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1) 0.2s" }}
+                          style={{ filter: "drop-shadow(0 0 10px #E1306CBB)", transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1) 0.2s" }}
                         />
                         {/* Centre text */}
                         <text x="50" y="46" textAnchor="middle" fill="#E8E6E1" fontSize="14" fontWeight="700"
@@ -1418,7 +1431,7 @@ export default function Dashboard() {
                         ].map(({ label, pct, count, color }) => (
                           <div key={label} className="flex items-center gap-2">
                             <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, boxShadow: `0 0 6px ${color}`, flexShrink: 0 }} />
-                            <span className="font-mono flex-1" style={{ fontSize: 10, color: "#9E9C97" }}>{label}</span>
+                            <span className="font-mono flex-1" style={{ fontSize: 10, color: "#B8B6B1" }}>{label}</span>
                             <span className="font-mono" style={{ fontSize: 10, color }}>{Math.round(pct*100)}%</span>
                           </div>
                         ))}
@@ -1439,7 +1452,7 @@ export default function Dashboard() {
                         <div key={label} className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span style={{ fontSize: 9, color, opacity: 0.8 }}>{icon}</span>
-                            <span className="font-mono" style={{ fontSize: 10, color: "#6B6860", letterSpacing: "0.06em" }}>{label}</span>
+                            <span className="font-mono" style={{ fontSize: 10, color: "#8A8885", letterSpacing: "0.06em" }}>{label}</span>
                           </div>
                           <span className="font-mono font-bold number-glow" style={{ fontSize: 14, color }}>{value}</span>
                         </div>
@@ -1475,7 +1488,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
-                    <p className="font-mono" style={{ fontSize: 10, color: "#6B6860", lineHeight: 1.7 }}>
+                    <p className="font-mono" style={{ fontSize: 10, color: "#8A8885", lineHeight: 1.7 }}>
                       {inputTab === "youtube"
                         ? "Paste a video URL, channel URL, or @handle above to begin analysis."
                         : inputTab === "tiktok"
@@ -1496,7 +1509,7 @@ export default function Dashboard() {
                       <span className="font-mono" style={{ fontSize: 9, color: "#2ECC8A", letterSpacing: "0.1em" }}>LIVE</span>
                     </div>
                   </div>
-                  <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
+                  <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                     {PLATFORMS_STATUS.map(({ label, short, color, signal, trend, status }) => {
                       const trendUp = trend.startsWith("+");
                       return (
@@ -1504,7 +1517,7 @@ export default function Dashboard() {
                           <div className="flex items-center justify-between mb-1.5">
                             <div className="flex items-center gap-1.5">
                               <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block", boxShadow: `0 0 6px ${color}` }} />
-                              <span className="font-mono" style={{ fontSize: 10, color: "#9E9C97" }}>{short}</span>
+                              <span className="font-mono" style={{ fontSize: 10, color: "#B8B6B1" }}>{short}</span>
                             </div>
                             <span className="font-mono" style={{ fontSize: 9, color: trendUp ? "#2ECC8A" : "#FF4D6A", fontWeight: 600 }}>{trend}</span>
                           </div>
@@ -1513,11 +1526,11 @@ export default function Dashboard() {
                             <div className="signal-bar-fill" style={{
                               width: `${signal}%`,
                               background: `linear-gradient(90deg, ${color}88, ${color})`,
-                              boxShadow: `0 0 8px ${color}66`,
+                              boxShadow: `0 0 14px ${color}CC, 0 0 28px ${color}44`,
                             }} />
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="font-mono" style={{ fontSize: 9, color: "#4A4845" }}>{signal}/100</span>
+                            <span className="font-mono" style={{ fontSize: 9, color: "#5E5A57" }}>{signal}/100</span>
                             <span className="font-mono" style={{
                               fontSize: 8, fontWeight: 700, letterSpacing: "0.08em",
                               color: signal >= 90 ? "#2ECC8A" : signal >= 80 ? "#F59E0B" : "#9E9C97",
@@ -1530,12 +1543,12 @@ export default function Dashboard() {
                 </div>
 
                 {/* ── Row 3: Mode matrix + Quick actions ── */}
-                <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
 
                   {/* Analysis mode matrix */}
                   <div className="glass-card" style={{ padding: "20px 24px" }}>
                     <div className="panel-label mb-3">Analysis Mode Matrix</div>
-                    <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                    <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
                       {[
                         { id: "A", label: "Platform Education", color: "#60A5FA", active: activeModes.includes("A"), desc: "Algorithm logic" },
                         { id: "B", label: "Continuous Update",  color: "#2ECC8A", active: activeModes.includes("B"), desc: "Latest changes"  },
@@ -1560,7 +1573,7 @@ export default function Dashboard() {
                           <div style={{ width: 5, height: 5, borderRadius: "50%", background: active ? color : "#3A3835", flexShrink: 0, boxShadow: active ? `0 0 6px ${color}` : "none", transition: "all 0.15s" }} />
                           <div className="flex-1 min-w-0">
                             <div className="font-mono truncate" style={{ fontSize: 9, color: active ? "#E8E6E1" : "#6B6860", fontWeight: active ? 600 : 400 }}>{label}</div>
-                            <div className="font-mono" style={{ fontSize: 8, color: "#4A4845" }}>{desc}</div>
+                            <div className="font-mono" style={{ fontSize: 8, color: "#5E5A57" }}>{desc}</div>
                           </div>
                           <span className="font-mono font-bold shrink-0" style={{ fontSize: 9, color: active ? color : "#3A3835" }}>{id}</span>
                         </div>
@@ -1582,7 +1595,7 @@ export default function Dashboard() {
                           { label: "Rework      0–39",  color: "#FF4D6A", pct: 5  },
                         ].map(({ label, color, pct }) => (
                           <div key={label} className="flex items-center gap-2">
-                            <span className="font-mono shrink-0" style={{ fontSize: 9, color: "#4A4845", width: 120 }}>{label}</span>
+                            <span className="font-mono shrink-0" style={{ fontSize: 9, color: "#5E5A57", width: 120 }}>{label}</span>
                             <div className="flex-1 signal-bar" style={{ height: 4 }}>
                               <div className="signal-bar-fill" style={{
                                 width: `${pct}%`,
@@ -1607,7 +1620,7 @@ export default function Dashboard() {
                         ].map(({ type, example, color }) => (
                           <div key={type} className="flex items-center gap-2">
                             <span className="font-mono shrink-0" style={{ fontSize: 9, color, background: `${color}12`, border: `1px solid ${color}25`, padding: "1px 6px", borderRadius: 4 }}>{type}</span>
-                            <span className="font-mono" style={{ fontSize: 10, color: "#4A4845" }}>{example}</span>
+                            <span className="font-mono" style={{ fontSize: 10, color: "#5E5A57" }}>{example}</span>
                           </div>
                         ))}
                       </div>
