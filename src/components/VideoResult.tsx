@@ -34,6 +34,7 @@ import CompetitorGapPanel from "./CompetitorGapPanel";
 import TagCorrelationPanel from "./TagCorrelationPanel";
 import UploadCadencePanel from "./UploadCadencePanel";
 import ViralityVerdictPanel from "./ViralityVerdictPanel";
+import ExpertWarRoomPanel from "./ExpertWarRoomPanel";
 
 interface VideoResultProps {
   video: EnrichedVideo;
@@ -90,6 +91,16 @@ export default function VideoResult({
     <div className="flex flex-col gap-4">
       {/* ── Virality Verdict — shown first ── */}
       <ViralityVerdictPanel
+        video={video}
+        channel={channel}
+        channelMedian={channelMedian}
+        recentVideos={recentVideos}
+        referenceStore={referenceStore}
+        keywordBank={keywordBank}
+      />
+
+      {/* ── Expert War Room ── */}
+      <ExpertWarRoomPanel
         video={video}
         channel={channel}
         channelMedian={channelMedian}
