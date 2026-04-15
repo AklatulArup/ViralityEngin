@@ -55,6 +55,22 @@ const FIELD_MAP: Record<string, string> = {
   comments:"comments", comment_count:"comments", replies:"comments",
   shares:"shares", share_count:"shares", reposts:"shares", retweets:"shares",
   saves:"saves", bookmarks:"saves",
+  // Instagram native export aliases
+  plays:"views", video_plays:"views", reel_plays:"views",
+  accounts_reached:"views", unique_accounts_reached:"views",
+  post_impressions:"views", story_impressions:"views",
+  post_id:"id_hint", post_type:"platform_hint", post_url:"url",
+  reel_id:"id_hint", media_url:"url", shortcode:"id_hint",
+  profile_visits:"saves", profile_activity:"saves",
+  // TikTok native export aliases
+  video_id:"id_hint", sound_name:"tags",
+  total_play_time:"duration", average_watch_time:"duration",
+  full_video_watched_rate:"engagement",
+  // YouTube Studio export aliases
+  video_id_yt:"id_hint", content_type:"platform_hint",
+  video_views:"views", watch_time_hours:"duration",
+  average_view_duration:"duration", average_view_percentage:"engagement",
+  subscribers_gained:"saves", subscribers_lost:"shares",
   date:"date", published_at:"date", post_date:"date", upload_date:"date",
   created_at:"date", publish_date:"date", video_date:"date", timestamp:"date",
   channel:"channel", creator:"channel", username:"channel", handle:"channel",

@@ -51,7 +51,7 @@ function mapItem(item: any): VideoData | null {
     title: captionText.slice(0, 200) || "Instagram Reel",
     channel: item.ownerUsername || item.username || "Unknown",
     channelId: item.ownerId || item.ownerUsername || "unknown",
-    views: views || likes * 20, // fallback estimate if no view count
+    views: views, // real public view count only — 0 if Instagram didn't expose it
     likes,
     comments,
     publishedAt: typeof publishedAt === "number"

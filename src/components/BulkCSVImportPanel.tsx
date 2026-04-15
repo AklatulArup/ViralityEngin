@@ -175,6 +175,51 @@ export default function BulkCSVImportPanel({ onComplete }: BulkCSVImportPanelPro
           </div>
         </div>
 
+        {/* ── Platform export guides ── */}
+        <div style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 8, padding: "12px 16px", marginBottom: 16 }}>
+          <div className="font-mono" style={{ fontSize: 9, color: "#5E5A57", letterSpacing: "0.1em", marginBottom: 8 }}>HOW TO EXPORT YOUR DATA FROM EACH PLATFORM</div>
+          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+            {[
+              { platform: "Instagram", color: "#E1306C", icon: "◎", steps: [
+                "Go to your Professional Dashboard",
+                "Tap 'See all insights'",
+                "Filter by Content type → Reels/Posts",
+                "Tap '⋮' → Export data → Download CSV",
+                "Or use Creator Studio → Content Library → Export",
+              ]},
+              { platform: "TikTok", color: "#06B6D4", icon: "♪", steps: [
+                "Open TikTok Creator Center",
+                "Analytics → Content tab",
+                "Filter date range",
+                "Click 'Download data' → CSV",
+                "Or use TikTok Business Center Analytics",
+              ]},
+              { platform: "YouTube", color: "#EF4444", icon: "▶", steps: [
+                "YouTube Studio → Analytics",
+                "Click 'Advanced mode'",
+                "Select date range + metrics",
+                "Click 'Export current view' (↓)",
+                "Download as CSV",
+              ]},
+            ].map(({ platform, color, icon, steps }) => (
+              <div key={platform}>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span style={{ color, fontSize: 10 }}>{icon}</span>
+                  <span className="font-mono font-bold" style={{ fontSize: 10, color }}>{platform}</span>
+                </div>
+                <ol style={{ listStyleType: "none", padding: 0 }}>
+                  {steps.map((step, i) => (
+                    <li key={i} className="flex items-start gap-2 mb-1">
+                      <span className="font-mono shrink-0" style={{ fontSize: 8, color: `${color}88`, marginTop: 2 }}>{i+1}.</span>
+                      <span className="font-mono" style={{ fontSize: 9, color: "#8A8885", lineHeight: 1.5 }}>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* ── Drop zone + textarea ── */}
         <div
           onDrop={onDrop}

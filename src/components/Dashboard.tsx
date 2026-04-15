@@ -1244,7 +1244,15 @@ export default function Dashboard() {
           )}
 
           {inputTab === "instagram" && (
-            <div className="flex-1 flex gap-2.5 items-center">
+            <div className="flex-1 flex flex-col gap-2">
+              {/* Instagram accuracy warning */}
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg" style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                <span style={{ fontSize: 12, flexShrink: 0 }}>⚠️</span>
+                <span className="font-mono" style={{ fontSize: 9, color: "#F59E0B", letterSpacing: "0.05em", lineHeight: 1.5 }}>
+                  <strong>Instagram scraping returns public data only.</strong> For accurate Plays, Reach & Saves, export your analytics CSV from Instagram Insights and use <span style={{ color: "#2ECC8A" }}>Bulk CSV Import</span> instead.
+                </span>
+              </div>
+              <div className="flex gap-2.5 items-center">
               <div
                 className="flex-1 flex items-center gap-3 rounded-xl overflow-hidden transition-all duration-200"
                 style={{ height: 44, padding: "0 14px", background: "rgba(4,4,2,0.90)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 12px rgba(0,0,0,0.4)" }}
@@ -1286,6 +1294,7 @@ export default function Dashboard() {
               >
                 Queue
               </button>
+              </div>
             </div>
           )}
 
