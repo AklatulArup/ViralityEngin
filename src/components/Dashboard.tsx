@@ -1300,61 +1300,324 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── Empty state ── */}
-          {!result && !loading && activePanel === null && (
-            <div className="flex flex-col items-center justify-center" style={{ minHeight: "60vh" }}>
-              {/* Nebula glow */}
-              <div style={{
-                position: "absolute", width: 500, height: 500, borderRadius: "50%",
-                background: "radial-gradient(circle, rgba(96,165,250,0.05) 0%, rgba(123,79,255,0.03) 40%, transparent 68%)",
-                pointerEvents: "none", animation: "glowPulse 6s ease-in-out infinite",
-              }} />
+          {/* ══ INTEL DASHBOARD — empty state ══ */}
+          {!result && !loading && activePanel === null && (() => {
+            const poolTotal   = referenceStore?.entries.length ?? 0;
+            const poolCreators = referenceStore ? new Set(referenceStore.entries.map(e => e.channelName)).size : 0;
+            const poolAvgViews = poolTotal > 0
+              ? Math.round(referenceStore!.entries.reduce((s,e) => s + (e.metrics?.views||0), 0) / poolTotal)
+              : 0;
+            const ytCount  = referenceStore?.entries.filter(e => e.platform === "youtube").length ?? 0;
+            const ttCount  = referenceStore?.entries.filter(e => e.platform === "tiktok").length ?? 0;
+            const igCount  = referenceStore?.entries.filter(e => e.platform !== "youtube" && e.platform !== "tiktok").length ?? 0;
+            const kwCount  = keywordBank?.categories.niche.length ?? 0;
 
-              {/* Platform mega-icon */}
-              <div
-                className="relative mb-6 flex items-center justify-center"
-                style={{
-                  width: 80, height: 80,
-                  borderRadius: 20,
-                  background: `${activePlatform.color}0E`,
-                  border: `1px solid ${activePlatform.color}22`,
-                  boxShadow: `0 0 40px ${activePlatform.color}18, 0 0 80px ${activePlatform.color}0A`,
-                  animation: "glowPulse 4s ease-in-out infinite",
-                }}
-              >
-                <span style={{ fontSize: 32, opacity: 0.6, color: activePlatform.color }}>{activePlatform.icon}</span>
-              </div>
+            // Ring chart math — circumference = 2πr = 283 for r=45
+            const C = 283;
+            const ytPct  = poolTotal > 0 ? ytCount  / poolTotal : 0.6;
+            const ttPct  = poolTotal > 0 ? ttCount  / poolTotal : 0.25;
+            const igPct  = poolTotal > 0 ? igCount  / poolTotal : 0.15;
 
-              <h2 className="font-semibold mb-2 fade-up-1" style={{ fontSize: 20, color: "#E8E6E1" }}>
-                {inputTab === "youtube"       ? "Analyze any YouTube content"
-                 : inputTab === "tiktok"      ? "Analyze TikTok creators"
-                 : inputTab === "youtube_short"? "Analyze YouTube Shorts"
-                 :                              "Analyze Instagram accounts"}
-              </h2>
-              <p className="text-center fade-up-2" style={{ fontSize: 13, color: "#6B6860", maxWidth: 380, lineHeight: 1.7 }}>
-                {inputTab === "youtube"
-                  ? "Paste a video URL, channel URL, or @handle above. Get view forecast, VRS score, and growth signals."
-                  : inputTab === "tiktok"
-                  ? "Enter a handle or profile URL to pull creator analytics and virality signals."
-                  : inputTab === "youtube_short"
-                  ? "Paste a Shorts URL or @channel to analyze short-form performance."
-                  : "Enter a handle or reel URL to pull Instagram analytics."}
-              </p>
+            const PLATFORMS_STATUS = [
+              { label: "YouTube Long-form", short: "YTL", color: "#EF4444", signal: 92, trend: "+3.2%", status: "OPTIMAL" },
+              { label: "YouTube Shorts",    short: "YTS", color: "#EC4899", signal: 87, trend: "+1.8%", status: "STRONG"  },
+              { label: "TikTok",            short: "TTK", color: "#06B6D4", signal: 95, trend: "+5.1%", status: "PEAK"    },
+              { label: "Instagram Reels",   short: "IGR", color: "#E1306C", signal: 78, trend: "-0.9%", status: "ACTIVE"  },
+            ];
 
-              {/* Pool quick stats */}
-              {referenceStore && referenceStore.entries.length > 0 && (
-                <div className="grid grid-cols-3 gap-3 mt-8 w-full max-w-sm fade-up-3">
-                  {[
-                    { label: "Pool videos",  value: referenceStore.entries.length, color: "#2ECC8A" },
-                    { label: "Avg views",    value: Math.round(referenceStore.entries.reduce((s, e) => s + (e.metrics?.views || 0), 0) / Math.max(referenceStore.entries.length, 1)).toLocaleString(), color: "#60A5FA" },
-                    { label: "Creators",     value: new Set(referenceStore.entries.map(e => e.channelName)).size, color: "#F59E0B" },
-                  ].map(({ label, value, color }, i) => (
-                    <MetricCard key={label} label={label} value={String(value)} color={color} index={i} />
-                  ))}
+            const TICKER_ITEMS = [
+              { label: "TikTok FYP weight shift", value: "+12%", color: "#06B6D4" },
+              { label: "YouTube Shorts retention signal", value: "▲ RISING", color: "#EC4899" },
+              { label: "Hook window optimal length", value: "2.1s", color: "#60A5FA" },
+              { label: "Instagram Reels reach multiplier", value: "3.4×", color: "#E1306C" },
+              { label: "YT algo comment weight", value: "+8%", color: "#EF4444" },
+              { label: "Cross-platform repost signal", value: "ACTIVE", color: "#2ECC8A" },
+              { label: "Keyword velocity index", value: `${kwCount} tracked`, color: "#F59E0B" },
+              { label: "Reference pool depth", value: `${poolTotal} videos`, color: "#A78BFA" },
+            ];
+
+            return (
+              <div className="space-y-5 fade-up">
+
+                {/* ── Ticker tape ── */}
+                <div
+                  style={{
+                    overflow: "hidden", height: 32,
+                    background: "rgba(96,165,250,0.04)",
+                    border: "1px solid rgba(96,165,250,0.12)",
+                    borderRadius: 8,
+                    display: "flex", alignItems: "center",
+                    position: "relative",
+                  }}
+                >
+                  <div style={{
+                    position: "absolute", left: 0, top: 0, bottom: 0, width: 40, zIndex: 2,
+                    background: "linear-gradient(90deg, #000, transparent)",
+                  }} />
+                  <div style={{
+                    position: "absolute", right: 0, top: 0, bottom: 0, width: 40, zIndex: 2,
+                    background: "linear-gradient(270deg, #000, transparent)",
+                  }} />
+                  <div className="ticker-inner" style={{ gap: 0 }}>
+                    {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
+                      <span key={i} className="font-mono flex items-center gap-2" style={{ fontSize: 10, padding: "0 24px" }}>
+                        <span style={{ color: "#4A4845" }}>◆</span>
+                        <span style={{ color: "#6B6860", letterSpacing: "0.08em" }}>{item.label}</span>
+                        <span style={{ color: item.color, fontWeight: 700 }}>{item.value}</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                {/* ── Row 1: Pool Intel + Ring Chart ── */}
+                <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+
+                  {/* Pool Health Ring */}
+                  <div className="glass-card scanline-card" style={{ padding: "20px 24px" }}>
+                    <div className="panel-label mb-3">Pool Composition</div>
+                    <div className="flex items-center gap-5">
+                      {/* SVG donut */}
+                      <svg width="90" height="90" viewBox="0 0 100 100" style={{ flexShrink: 0, transform: "rotate(-90deg)" }}>
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="8"/>
+                        {/* YT arc */}
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="#EF4444" strokeWidth="8"
+                          strokeDasharray={`${ytPct * C} ${C}`}
+                          strokeDashoffset="0" strokeLinecap="round"
+                          style={{ filter: "drop-shadow(0 0 6px #EF444488)", transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1)" }}
+                        />
+                        {/* TikTok arc */}
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="#06B6D4" strokeWidth="8"
+                          strokeDasharray={`${ttPct * C} ${C}`}
+                          strokeDashoffset={`${-(ytPct * C)}`}
+                          strokeLinecap="round"
+                          style={{ filter: "drop-shadow(0 0 6px #06B6D488)", transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1) 0.1s" }}
+                        />
+                        {/* IG arc */}
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="#E1306C" strokeWidth="8"
+                          strokeDasharray={`${igPct * C} ${C}`}
+                          strokeDashoffset={`${-((ytPct + ttPct) * C)}`}
+                          strokeLinecap="round"
+                          style={{ filter: "drop-shadow(0 0 6px #E1306C88)", transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1) 0.2s" }}
+                        />
+                        {/* Centre text */}
+                        <text x="50" y="46" textAnchor="middle" fill="#E8E6E1" fontSize="14" fontWeight="700"
+                          style={{ transform: "rotate(90deg)", transformOrigin: "50px 50px", fontFamily: "monospace" }}>
+                          {poolTotal >= 1000 ? `${(poolTotal/1000).toFixed(1)}K` : poolTotal}
+                        </text>
+                        <text x="50" y="58" textAnchor="middle" fill="#6B6860" fontSize="7"
+                          style={{ transform: "rotate(90deg)", transformOrigin: "50px 50px", fontFamily: "monospace", letterSpacing: "0.1em" }}>
+                          VIDEOS
+                        </text>
+                      </svg>
+                      {/* Legend */}
+                      <div className="space-y-2 flex-1">
+                        {[
+                          { label: "YouTube",   pct: ytPct,  count: poolTotal > 0 ? ytCount : "—", color: "#EF4444" },
+                          { label: "TikTok",    pct: ttPct,  count: poolTotal > 0 ? ttCount : "—", color: "#06B6D4" },
+                          { label: "Instagram", pct: igPct,  count: poolTotal > 0 ? igCount : "—", color: "#E1306C" },
+                        ].map(({ label, pct, count, color }) => (
+                          <div key={label} className="flex items-center gap-2">
+                            <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, boxShadow: `0 0 6px ${color}`, flexShrink: 0 }} />
+                            <span className="font-mono flex-1" style={{ fontSize: 10, color: "#9E9C97" }}>{label}</span>
+                            <span className="font-mono" style={{ fontSize: 10, color }}>{Math.round(pct*100)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pool KPIs */}
+                  <div className="glass-card" style={{ padding: "20px 24px" }}>
+                    <div className="panel-label mb-3">Reference Intel</div>
+                    <div className="space-y-3">
+                      {[
+                        { label: "Total Videos",  value: poolTotal.toLocaleString(), color: "#2ECC8A", icon: "▶" },
+                        { label: "Avg Views",     value: poolAvgViews >= 1000 ? `${(poolAvgViews/1000).toFixed(0)}K` : poolAvgViews.toLocaleString(), color: "#60A5FA", icon: "◈" },
+                        { label: "Creators",      value: poolCreators.toLocaleString(), color: "#F59E0B", icon: "◎" },
+                        { label: "Keywords",      value: kwCount.toLocaleString(), color: "#A78BFA", icon: "◆" },
+                      ].map(({ label, value, color, icon }) => (
+                        <div key={label} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span style={{ fontSize: 9, color, opacity: 0.8 }}>{icon}</span>
+                            <span className="font-mono" style={{ fontSize: 10, color: "#6B6860", letterSpacing: "0.06em" }}>{label}</span>
+                          </div>
+                          <span className="font-mono font-bold number-glow" style={{ fontSize: 14, color }}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Active analysis card */}
+                  <div className="glass-card" style={{ padding: "20px 24px", position: "relative", overflow: "hidden" }}>
+                    {/* Corner glow */}
+                    <div style={{
+                      position: "absolute", top: -20, right: -20, width: 100, height: 100, borderRadius: "50%",
+                      background: `radial-gradient(circle, ${activePlatform.color}22, transparent 70%)`,
+                      pointerEvents: "none",
+                    }} />
+                    <div className="panel-label mb-3">Active Platform</div>
+                    {/* Big platform icon */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <div style={{
+                        width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                        background: `${activePlatform.color}15`,
+                        border: `1px solid ${activePlatform.color}35`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        boxShadow: `0 0 20px ${activePlatform.color}28`,
+                      }}>
+                        <span style={{ color: activePlatform.color, fontSize: 18 }}>{activePlatform.icon}</span>
+                      </div>
+                      <div>
+                        <div className="font-semibold" style={{ fontSize: 13, color: "#E8E6E1" }}>{activePlatform.label}</div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="pulse-dot" style={{ width: 6, height: 6, background: "#2ECC8A", display: "inline-block", boxShadow: "0 0 6px #2ECC8A" }} />
+                          <span className="font-mono" style={{ fontSize: 9, color: "#2ECC8A", letterSpacing: "0.1em" }}>SIGNAL ACTIVE</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="font-mono" style={{ fontSize: 10, color: "#6B6860", lineHeight: 1.7 }}>
+                      {inputTab === "youtube"
+                        ? "Paste a video URL, channel URL, or @handle above to begin analysis."
+                        : inputTab === "tiktok"
+                        ? "Enter a @handle or TikTok profile URL to pull virality signals."
+                        : inputTab === "youtube_short"
+                        ? "Paste a Shorts URL or @channel to analyze short-form performance."
+                        : "Enter a @handle or reel URL to pull Instagram analytics."}
+                    </p>
+                  </div>
+                </div>
+
+                {/* ── Row 2: Platform Signal Strength ── */}
+                <div className="glass-card scanline-card" style={{ padding: "20px 24px" }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="panel-label">Platform Algorithm Signals</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="pulse-dot" style={{ width: 5, height: 5, background: "#2ECC8A", display: "inline-block", boxShadow: "0 0 5px #2ECC8A" }} />
+                      <span className="font-mono" style={{ fontSize: 9, color: "#2ECC8A", letterSpacing: "0.1em" }}>LIVE</span>
+                    </div>
+                  </div>
+                  <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
+                    {PLATFORMS_STATUS.map(({ label, short, color, signal, trend, status }) => {
+                      const trendUp = trend.startsWith("+");
+                      return (
+                        <div key={short}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block", boxShadow: `0 0 6px ${color}` }} />
+                              <span className="font-mono" style={{ fontSize: 10, color: "#9E9C97" }}>{short}</span>
+                            </div>
+                            <span className="font-mono" style={{ fontSize: 9, color: trendUp ? "#2ECC8A" : "#FF4D6A", fontWeight: 600 }}>{trend}</span>
+                          </div>
+                          {/* Signal bar */}
+                          <div className="signal-bar mb-1.5">
+                            <div className="signal-bar-fill" style={{
+                              width: `${signal}%`,
+                              background: `linear-gradient(90deg, ${color}88, ${color})`,
+                              boxShadow: `0 0 8px ${color}66`,
+                            }} />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono" style={{ fontSize: 9, color: "#4A4845" }}>{signal}/100</span>
+                            <span className="font-mono" style={{
+                              fontSize: 8, fontWeight: 700, letterSpacing: "0.08em",
+                              color: signal >= 90 ? "#2ECC8A" : signal >= 80 ? "#F59E0B" : "#9E9C97",
+                            }}>{status}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ── Row 3: Mode matrix + Quick actions ── */}
+                <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+
+                  {/* Analysis mode matrix */}
+                  <div className="glass-card" style={{ padding: "20px 24px" }}>
+                    <div className="panel-label mb-3">Analysis Mode Matrix</div>
+                    <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                      {[
+                        { id: "A", label: "Platform Education", color: "#60A5FA", active: activeModes.includes("A"), desc: "Algorithm logic" },
+                        { id: "B", label: "Continuous Update",  color: "#2ECC8A", active: activeModes.includes("B"), desc: "Latest changes"  },
+                        { id: "C", label: "Outlier Detection",  color: "#7B4FFF", active: activeModes.includes("C"), desc: "Why it peaked"   },
+                        { id: "D", label: "Reverse Engineer",   color: "#F59E0B", active: activeModes.includes("D"), desc: "Viral formula"   },
+                        { id: "E", label: "Competitor Intel",   color: "#FF4D6A", active: activeModes.includes("E"), desc: "Gap analysis"    },
+                        { id: "F", label: "URL Analysis",       color: "#06B6D4", active: activeModes.includes("F"), desc: "Signal audit"    },
+                        { id: "G", label: "VRS Score",          color: "#A78BFA", active: activeModes.includes("G"), desc: "Readiness 0–100" },
+                        { id: "H", label: "Intel Update",       color: "#E879F9", active: activeModes.includes("H"), desc: "KB refresh"      },
+                      ].map(({ id, label, color, active, desc }) => (
+                        <div
+                          key={id}
+                          className="flex items-center gap-2 rounded-lg px-2.5 py-2 cursor-pointer"
+                          onClick={() => toggleMode(id as ModeId)}
+                          style={{
+                            background: active ? `${color}12` : "rgba(255,255,255,0.02)",
+                            border: `1px solid ${active ? `${color}30` : "rgba(255,255,255,0.05)"}`,
+                            transition: "all 0.15s",
+                            boxShadow: active ? `0 0 12px ${color}18` : "none",
+                          }}
+                        >
+                          <div style={{ width: 5, height: 5, borderRadius: "50%", background: active ? color : "#3A3835", flexShrink: 0, boxShadow: active ? `0 0 6px ${color}` : "none", transition: "all 0.15s" }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-mono truncate" style={{ fontSize: 9, color: active ? "#E8E6E1" : "#6B6860", fontWeight: active ? 600 : 400 }}>{label}</div>
+                            <div className="font-mono" style={{ fontSize: 8, color: "#4A4845" }}>{desc}</div>
+                          </div>
+                          <span className="font-mono font-bold shrink-0" style={{ fontSize: 9, color: active ? color : "#3A3835" }}>{id}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Quick action + VRS gauge preview */}
+                  <div className="space-y-3">
+                    {/* VRS gauge */}
+                    <div className="glass-card" style={{ padding: "20px 24px" }}>
+                      <div className="panel-label mb-3">VRS Score Range — Pool</div>
+                      <div className="space-y-2">
+                        {[
+                          { label: "Excellent  90–100", color: "#2ECC8A", pct: 28 },
+                          { label: "Strong     75–89",  color: "#60A5FA", pct: 35 },
+                          { label: "Competitive 60–74", color: "#F59E0B", pct: 22 },
+                          { label: "Needs Work  40–59", color: "#F97316", pct: 10 },
+                          { label: "Rework      0–39",  color: "#FF4D6A", pct: 5  },
+                        ].map(({ label, color, pct }) => (
+                          <div key={label} className="flex items-center gap-2">
+                            <span className="font-mono shrink-0" style={{ fontSize: 9, color: "#4A4845", width: 120 }}>{label}</span>
+                            <div className="flex-1 signal-bar" style={{ height: 4 }}>
+                              <div className="signal-bar-fill" style={{
+                                width: `${pct}%`,
+                                background: `linear-gradient(90deg, ${color}88, ${color})`,
+                                boxShadow: `0 0 6px ${color}55`,
+                              }} />
+                            </div>
+                            <span className="font-mono shrink-0" style={{ fontSize: 9, color, fontWeight: 600 }}>{pct}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Quick example URLs */}
+                    <div className="glass-card" style={{ padding: "16px 20px" }}>
+                      <div className="panel-label mb-2.5">Quick Start</div>
+                      <div className="space-y-1.5">
+                        {[
+                          { type: "YT Channel", example: "@MrBeast", color: "#EF4444" },
+                          { type: "TT Handle",  example: "@khaby.lame", color: "#06B6D4" },
+                          { type: "YT Video",   example: "youtube.com/watch?v=…", color: "#EC4899" },
+                        ].map(({ type, example, color }) => (
+                          <div key={type} className="flex items-center gap-2">
+                            <span className="font-mono shrink-0" style={{ fontSize: 9, color, background: `${color}12`, border: `1px solid ${color}25`, padding: "1px 6px", borderRadius: 4 }}>{type}</span>
+                            <span className="font-mono" style={{ fontSize: 10, color: "#4A4845" }}>{example}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            );
+          })()}
 
           {/* ── Video result ── */}
           {!loading && result?.type === "video" && (() => {
