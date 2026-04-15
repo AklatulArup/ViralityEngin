@@ -1352,32 +1352,29 @@ export default function Dashboard() {
             return (
               <div className="space-y-5 fade-up">
 
-                {/* ── Ticker tape ── */}
+                {/* ── Signal Feed — vertical list ── */}
                 <div
-                  style={{
-                    overflow: "hidden", height: 32,
-                    background: "rgba(96,165,250,0.04)",
-                    border: "1px solid rgba(96,165,250,0.12)",
-                    borderRadius: 8,
-                    display: "flex", alignItems: "center",
-                    position: "relative",
-                  }}
+                  className="glass-card"
+                  style={{ padding: "16px 20px" }}
                 >
-                  <div style={{
-                    position: "absolute", left: 0, top: 0, bottom: 0, width: 40, zIndex: 2,
-                    background: "linear-gradient(90deg, #000, transparent)",
-                  }} />
-                  <div style={{
-                    position: "absolute", right: 0, top: 0, bottom: 0, width: 40, zIndex: 2,
-                    background: "linear-gradient(270deg, #000, transparent)",
-                  }} />
-                  <div className="ticker-inner" style={{ gap: 0 }}>
-                    {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-                      <span key={i} className="font-mono flex items-center gap-2" style={{ fontSize: 10, padding: "0 24px", opacity: 0.95 }}>
-                        <span style={{ color: "#5E5A57" }}>◆</span>
-                        <span style={{ color: "#8A8885", letterSpacing: "0.08em" }}>{item.label}</span>
-                        <span style={{ color: item.color, fontWeight: 700 }}>{item.value}</span>
-                      </span>
+                  <div className="panel-label mb-3">Live Signal Feed</div>
+                  <div className="space-y-2">
+                    {TICKER_ITEMS.map((item, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between rounded-lg px-3 py-2"
+                        style={{
+                          background: `${item.color}08`,
+                          border: `1px solid ${item.color}18`,
+                          animation: `fadeUpIn 0.35s cubic-bezier(0.16,1,0.3,1) ${i * 0.04}s both`,
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: item.color, display: "inline-block", boxShadow: `0 0 6px ${item.color}`, flexShrink: 0 }} />
+                          <span className="font-mono" style={{ fontSize: 11, color: "#B8B6B1", letterSpacing: "0.04em" }}>{item.label}</span>
+                        </div>
+                        <span className="font-mono font-bold" style={{ fontSize: 11, color: item.color, textShadow: `0 0 10px ${item.color}88` }}>{item.value}</span>
+                      </div>
                     ))}
                   </div>
                 </div>

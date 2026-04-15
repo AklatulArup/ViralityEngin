@@ -425,18 +425,6 @@ input[type="date"] { color-scheme: dark; }
   100% { transform: translateX(20px); opacity: 0; }
 }
 
-/* Ticker tape */
-@keyframes tickerScroll {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-.ticker-inner {
-  display: flex;
-  animation: tickerScroll 28s linear infinite;
-  white-space: nowrap;
-}
-
 /* Pulse dot */
 @keyframes pulseDot {
   0%,100% { transform: scale(1); opacity: 1; }
