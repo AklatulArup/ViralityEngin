@@ -1972,6 +1972,7 @@ export default function Dashboard() {
                     competitorGap={competitorGap}
                     tagCorrelation={tagCorrelation}
                     uploadCadence={uploadCadence}
+                    referenceStore={referenceStore}
                   />
                 </div>
               </div>

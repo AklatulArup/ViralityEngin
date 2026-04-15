@@ -33,6 +33,7 @@ import ThumbnailPanel from "./ThumbnailPanel";
 import CompetitorGapPanel from "./CompetitorGapPanel";
 import TagCorrelationPanel from "./TagCorrelationPanel";
 import UploadCadencePanel from "./UploadCadencePanel";
+import ViralityVerdictPanel from "./ViralityVerdictPanel";
 
 interface VideoResultProps {
   video: EnrichedVideo;
@@ -56,6 +57,7 @@ interface VideoResultProps {
   competitorGap?: CompetitorGapMatrix | null;
   tagCorrelation?: TagCorrelationResult | null;
   uploadCadence?: UploadCadenceResult | null;
+  referenceStore?: import("@/lib/types").ReferenceStore | null;
 }
 
 export default function VideoResult({
@@ -80,11 +82,22 @@ export default function VideoResult({
   competitorGap,
   tagCorrelation,
   uploadCadence,
+  referenceStore,
 }: VideoResultProps) {
   const archetypes = detectArchetypes(video.title, video.tags);
 
   return (
     <div className="flex flex-col gap-4">
+      {/* ── Virality Verdict — shown first ── */}
+      <ViralityVerdictPanel
+        video={video}
+        channel={channel}
+        channelMedian={channelMedian}
+        recentVideos={recentVideos}
+        referenceStore={referenceStore}
+        keywordBank={keywordBank}
+      />
+
       {/* ── Video hero card ── */}
       <div
         className="glass-card"

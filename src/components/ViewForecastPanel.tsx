@@ -452,60 +452,6 @@ export default function ViewForecastPanel({ video, forecastDate, onDateChange }:
             )}
           </div>
 
-          {/* ── 6-month projection chart ── */}
-          <div className="mx-6 mb-5">
-            <div className="text-[11px] font-mono uppercase tracking-widest mb-3" style={{ color: "#86868b" }}>
-              6-Month View Projection
-            </div>
-            <div className="space-y-1.5">
-              {forecast.monthlyProjections.map((m) => (
-                <div key={m.month} className="flex items-center gap-3">
-                  <span className="text-[10px] font-mono w-14 shrink-0" style={{ color: "#86868b" }}>
-                    Month {m.month}
-                  </span>
-                  <div className="flex-1 relative h-6 rounded-lg overflow-hidden" style={{ background: "rgba(139,92,246,0.07)" }}>
-                    {/* High bar */}
-                    <div
-                      className="absolute top-0 h-full rounded-lg"
-                      style={{
-                        left: 0,
-                        width: `${(m.high / barMax) * 100}%`,
-                        background: "rgba(0,183,100,0.25)",
-                      }}
-                    />
-                    {/* Mid bar */}
-                    <div
-                      className="absolute top-0 h-full rounded-lg"
-                      style={{
-                        left: 0,
-                        width: `${(m.mid / barMax) * 100}%`,
-                        background: "rgba(0,212,170,0.5)",
-                      }}
-                    />
-                    <div className="absolute inset-0 flex items-center px-2">
-                      <span className="text-[9px] font-mono font-bold" style={{ color: "#f5f5f7" }}>
-                        {formatNumber(m.mid)}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-[9px] font-mono w-12 text-right shrink-0" style={{ color: "#86868b" }}>
-                    {formatNumber(m.high)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-3 mt-2">
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-sm" style={{ background: "rgba(0,212,170,0.5)" }} />
-                <span className="text-[9px]" style={{ color: "#86868b" }}>Average trajectory</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-sm" style={{ background: "rgba(0,183,100,0.25)" }} />
-                <span className="text-[9px]" style={{ color: "#86868b" }}>Highest possible</span>
-              </div>
-            </div>
-          </div>
-
           {/* ── Replication signals ── */}
           <div className="mx-6 mb-5">
             <button
