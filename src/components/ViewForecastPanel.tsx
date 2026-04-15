@@ -306,12 +306,15 @@ export default function ViewForecastPanel({ video, forecastDate, onDateChange }:
                         className="rounded-xl px-4 py-3 font-mono text-[13px] text-center"
                         style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "#f5f5f7" }}
                       >
-                        K = i × c × 10 + platformScore × 0.5
+                        K = (Shares per viewer) × (% of shares → new views)
                       </div>
                       <div className="mt-2 text-[11px] space-y-1" style={{ color: "#86868b" }}>
-                        <div><span style={{ color: "#f5f5f7" }}>K</span> — Viral coefficient. &gt;1 = each view generates more than 1 new view (exponential). &lt;1 = shrinking reach.</div>
-                        <div><span style={{ color: "#f5f5f7" }}>i</span> — Infectiousness: estimated shares per 1,000 views. Derived from like rate × share proxy.</div>
-                        <div><span style={{ color: "#f5f5f7" }}>c</span> — Conversion: what % of people who see a share actually watch. Derived from platform score × baseline performance.</div>
+                        <div><span style={{ color: "#f5f5f7" }}>K</span> — Virality Coefficient. If K &gt; 1, each generation of viewers produces more than 1 new viewer — growth compounds exponentially. If K &lt; 1, reach eventually decays. Content with K &gt; 1 is the goal — this is why DM sends matter more than likes.</div>
+                        <div><span style={{ color: "#f5f5f7" }}>Shares per viewer (i)</span> — Estimated DM sends and external shares per 1,000 views. DM shares are the highest-value action on all platforms: TikTok leaked pts: DM Share=25, Save=15, Finish=8, Like&lt;8.</div>
+                        <div><span style={{ color: "#f5f5f7" }}>Conversion rate (c)</span> — What fraction of people who receive a share actually watch it. Derived from platform score × vs-baseline. A strong platform score means shares are converting to real views.</div>
+                        <div className="mt-1 px-2 py-1.5 rounded-lg" style={{ background: "rgba(255,184,0,0.06)", border: "1px solid rgba(255,184,0,0.15)" }}>
+                          <span style={{ color: "#FFB800" }}>⚡ Key insight:</span> A like cannot push K above 1 on its own. A DM send can. Instagram weights DM sends at ~40% of its entire scoring formula (confirmed Mosseri, Jan 2025). Build for DMs, not likes.
+                        </div>
                       </div>
                     </div>
 
