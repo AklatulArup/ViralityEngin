@@ -5,7 +5,7 @@ import type { ReferenceStore } from "@/lib/types";
 import { classifyVideoFormat, classifyOrientation, formatDuration, quickSentiment } from "@/lib/video-classifier";
 
 const STORE_PATH = join(process.cwd(), "src/data/reference-store.json");
-const YT_KEY = process.env.YOUTUBE_API_KEY;
+const YT_KEY = process.env.YOUTUBE_API_KEY || process.env.YOUTUBE_API_KEY_2;
 
 function readStore(): ReferenceStore {
   try {

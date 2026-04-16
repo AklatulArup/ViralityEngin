@@ -67,9 +67,9 @@ function mapItem(item: any): TikTokVideoData {
 }
 
 export async function POST(request: Request) {
-  const token = process.env.APIFY_TOKEN || process.env.TikTok_API_Key || process.env.TIKTOK_API_KEY || process.env.YOUTUBE_API_KEY_2;
+  const token = process.env.TikTok_API_Key || process.env.APIFY_TOKEN || process.env.TIKTOK_API_KEY || process.env.YOUTUBE_API_KEY_2;
   if (!token) {
-    return Response.json({ error: "APIFY_TOKEN not configured" }, { status: 500 });
+    return Response.json({ error: "No TikTok API key found. Set TikTok_API_Key in Vercel env vars." }, { status: 500 });
   }
 
   const body = await request.json();

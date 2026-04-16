@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.Claude_AI_Summary_API_KEY || process.env.CLAUDE_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "ANTHROPIC_API_KEY not set in environment" }, { status: 500 });
+    return NextResponse.json({ error: "No Claude API key found. Set ANTHROPIC_API_KEY or Claude_AI_Summary_API_KEY in Vercel env vars." }, { status: 500 });
   }
 
   let body: { prompt?: string; persona?: string; mode?: string };

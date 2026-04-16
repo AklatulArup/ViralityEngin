@@ -3,7 +3,7 @@ import type { VideoData, ChannelData } from "./types";
 const API_BASE = "https://www.googleapis.com/youtube/v3";
 
 function getApiKey(): string {
-  const key = process.env.YOUTUBE_API_KEY;
+  const key = process.env.YOUTUBE_API_KEY || process.env.YOUTUBE_API_KEY_2;
   if (!key) throw new Error("YOUTUBE_API_KEY not set");
   return key;
 }

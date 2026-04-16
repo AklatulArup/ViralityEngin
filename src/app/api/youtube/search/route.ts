@@ -4,7 +4,7 @@ import { join } from "path";
 import { classifyVideoFormat, classifyOrientation, formatDuration, quickSentiment } from "@/lib/video-classifier";
 import type { Blocklist } from "@/lib/types";
 
-const YT_KEY = process.env.YOUTUBE_API_KEY;
+const YT_KEY = process.env.YOUTUBE_API_KEY || process.env.YOUTUBE_API_KEY_2;
 const BLOCKLIST_PATH = join(process.cwd(), "src/data/blocklist.json");
 
 function readBlocklist(): Blocklist {
