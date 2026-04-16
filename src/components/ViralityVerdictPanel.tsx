@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { puterAIChat } from "@/lib/puter-ai";
+import { buildContextualPrompt, updateSessionMemory } from "@/lib/context-memory";
 import type { EnrichedVideo, ChannelData, ReferenceStore, KeywordBank } from "@/lib/types";
 
 interface VerdictProps {

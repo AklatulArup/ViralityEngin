@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { puterAIChat } from "@/lib/puter-ai";
+import { buildContextualPrompt, updateSessionMemory } from "@/lib/context-memory";
 import type { EnrichedVideo, ChannelData, ReferenceStore, KeywordBank } from "@/lib/types";
 
 interface ExpertWarRoomProps {
@@ -131,6 +132,10 @@ export default function ExpertWarRoomPanel({
     setPhase("experts");
     setOpinions({});
     setVerdict(null);
+    // Register this analysis in session memory
+    const secs = video.durationSeconds ?? 0;
+    const platform = secs <= 60 ? "youtube_short" : "youtube";
+    updateSessionMemory(video, channel, platform, "ANALYSIS");
 
     // Init all as loading
     const init: Record<string, ExpertOpinion> = {};
