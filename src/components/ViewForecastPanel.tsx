@@ -21,11 +21,12 @@ export default function ViewForecastPanel({ video, forecastDate, onDateChange }:
     if (!forecastDate) return null;
     const target = new Date(forecastDate + "T12:00:00");
     if (isNaN(target.getTime())) return null;
+    // Works for both past and future dates
     return forecastViews(video, target);
   }, [video, forecastDate]);
 
-  const today = new Date().toISOString().split("T")[0];
   const maxDate = new Date(Date.now() + 730 * 86400000).toISOString().split("T")[0];
+  const minDate = "2010-01-01"; // Allow past dates for historical lookup
 
   const confidenceColor = { high: "#30D158", medium: "#FFD60A", low: "#FF453A" };
 
@@ -48,30 +49,44 @@ export default function ViewForecastPanel({ video, forecastDate, onDateChange }:
               View Count Forecast
             </h2>
             <p className="text-[11px] mt-0.5" style={{ color: "#86868b" }}>
-              {forecast?.platformLabel ?? "Select a future date to predict views"} · {forecast ? `${forecast.daysSincePublish}d of data` : "waiting for date"}
+              {forecast?.platformLabel ?? "Select a past or future date"} · {forecast ? `Day ${forecast.daysToTarget} since publish` : "pick a date to project views"}
             </p>
           </div>
         </div>
 
-        {/* Date picker */}
+        {/* Date picker — past & future */}
         <div className="flex items-center gap-2.5">
           <label className="text-[11px] font-medium" style={{ color: "#86868b" }}>
             Target date
           </label>
-          <input
-            type="date"
-            value={forecastDate}
-            min={today}
-            max={maxDate}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="rounded-xl px-3 py-2 text-[13px] font-mono outline-none cursor-pointer"
-            style={{
-              background: "rgba(139,92,246,0.12)",
-              border: "1px solid rgba(255,255,255,0.14)",
-              color: "#f5f5f7",
-              colorScheme: "dark",
-            }}
-          />
+          <div style={{ position: "relative" }}>
+            <input
+              type="date"
+              value={forecastDate}
+              min={minDate}
+              max={maxDate}
+              onChange={(e) => onDateChange(e.target.value)}
+              style={{
+                background: "rgba(96,165,250,0.10)",
+                border: "1px solid rgba(96,165,250,0.35)",
+                borderRadius: 10, padding: "7px 36px 7px 12px",
+                color: "#E8E6E1", fontSize: 13, fontFamily: "var(--font-mono)",
+                outline: "none", cursor: "pointer", colorScheme: "dark",
+                boxShadow: "0 0 12px rgba(96,165,250,0.15)",
+                appearance: "none", WebkitAppearance: "none",
+              }}
+            />
+            <span style={{
+              position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+              fontSize: 14, pointerEvents: "none", color: "#60A5FA",
+            }}>📅</span>
+          </div>
+          {forecastDate && (
+            <button
+              onClick={() => onDateChange("")}
+              style={{ background: "none", border: "none", color: "#5E5A57", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+            >×</button>
+          )}
         </div>
       </div>
 
@@ -79,8 +94,8 @@ export default function ViewForecastPanel({ video, forecastDate, onDateChange }:
       {!forecast && (
         <div className="px-6 py-12 text-center" style={{ color: "#86868b" }}>
           <div className="text-3xl mb-3" style={{ opacity: 0.3 }}>📅</div>
-          <div className="text-[14px] font-medium mb-1" style={{ color: "#f5f5f7" }}>Pick a target date above</div>
-          <div className="text-[12px]">The model will predict where this video's views will be on that date</div>
+          <div className="text-[14px] font-medium mb-1" style={{ color: "#f5f5f7" }}>Pick any date — past or future</div>
+          <div className="text-[12px]">Past dates show where the video was · Future dates project where it will be</div>
         </div>
       )}
 
