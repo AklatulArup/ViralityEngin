@@ -965,7 +965,7 @@ export default function Dashboard() {
             {[
               { value: referenceStore?.entries.filter(e => e.type === "video").length ?? 0, label: "Videos",   color: "#2ECC8A" },
               { value: referenceStore ? new Set(referenceStore.entries.map(e => e.channelName)).size : 0, label: "Creators", color: "#60A5FA" },
-              { value: referenceStore?.entries.filter(e => e.type === "video" && (e.durationSeconds ?? 999) <= 60).length ?? 0, label: "Shorts", color: "#EC4899" },
+              { value: referenceStore?.entries.filter(e => e.type === "video" && ((e as unknown as { durationSeconds?: number }).durationSeconds ?? 999) <= 60).length ?? 0, label: "Shorts", color: "#EC4899" },
               { value: keywordBank?.categories.niche.length ?? 0, label: "Keywords", color: "#F59E0B" },
             ].map(({ value, label, color }) => (
               <div
@@ -1242,6 +1242,7 @@ export default function Dashboard() {
               </button>
               <div className="shrink-0">
                 <CsvUpload onUpload={analyzeTikTok} loading={loading} lastUpload={tiktokUploadInfo} />
+              </div>
             </div>
           )}
 
@@ -1283,8 +1284,7 @@ export default function Dashboard() {
                   {loading ? <span className="orbital-loader" style={{ borderTopColor: "#E1306C", width: 14, height: 14 }} /> : "Analyze"}
                 </button>
                 <button
-                  onClick={() => saveInstagram(instagramInput.split("
-"))}
+                  onClick={() => saveInstagram(instagramInput.split("\n"))}
                   disabled={!instagramInput.trim()}
                   className="btn-ghost shrink-0"
                   style={{ height: 44, padding: "0 14px" }}
@@ -1327,37 +1327,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── Instagram data warning banner ── */}
-        {inputTab === "instagram" && (
-          <div className="flex items-center gap-3 px-5 py-2.5" style={{
-            background: "rgba(245,158,11,0.06)",
-            borderBottom: "1px solid rgba(245,158,11,0.18)",
-            backdropFilter: "blur(8px)",
-          }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)",
-              fontSize: 12, color: "#F59E0B",
-            }}>⚠</div>
-            <div className="flex-1">
-              <span className="font-mono font-semibold" style={{ fontSize: 10, color: "#F59E0B", letterSpacing: "0.06em" }}>
-                INSTAGRAM SCRAPING RETURNS PUBLIC DATA ONLY.
-              </span>
-              <span className="font-mono" style={{ fontSize: 10, color: "#8A8885", marginLeft: 6 }}>
-                For accurate Plays, Reach & Saves, export your analytics CSV from Instagram Insights and use
-              </span>
-              <button
-                onClick={() => setActivePanel("bulk-import" as typeof activePanel)}
-                className="font-mono font-semibold"
-                style={{ fontSize: 10, color: "#2ECC8A", background: "none", border: "none", cursor: "pointer",
-                  textDecoration: "underline", textUnderlineOffset: 3, marginLeft: 4, padding: 0 }}
-              >
-                Bulk CSV Import →
-              </button>
-            </div>
-          </div>
-        )}
+
 
         {/* ── Instagram accuracy notice — full-width, below topbar ── */}
         {inputTab === "instagram" && (
@@ -1371,7 +1341,7 @@ export default function Dashboard() {
           >
             <span style={{ fontSize: 13, flexShrink: 0 }}>⚠</span>
             <span className="font-mono" style={{ fontSize: 10, color: "#F59E0B", lineHeight: 1.6 }}>
-              <strong style={{ color: "#FFB830" }}>Public data only.</strong> Scraping returns what's visible on the profile page — not your private Insights (Plays, Reach, Saves).
+              <strong style={{ color: "#FFB830" }}>Public data only.</strong> Scraping returns what&apos;s visible on the profile page &mdash; not your private Insights (Plays, Reach, Saves).
               Export your CSV from <strong style={{ color: "#FFB830" }}>Instagram Professional Dashboard → Insights</strong> and use{" "}
               <button
                 onClick={() => setActivePanel("bulk-import" as typeof activePanel)}
@@ -1681,8 +1651,8 @@ export default function Dashboard() {
               return { score: Math.min(score, 100), status, trend, count: platformEntries.length, avgVRS: Math.round(avgVRS), avgEng: parseFloat(avgEng.toFixed(2)), avgVel: Math.round(avgVel) };
             }
 
-            const ytEntries  = entries.filter(e => e.platform === "youtube" && (e.metrics?.durationSeconds ?? 999) > 60);
-            const ytsEntries = entries.filter(e => e.platform === "youtube_short" || (e.platform === "youtube" && (e.metrics?.durationSeconds ?? 999) <= 60) || (e.durationSeconds ?? 999) <= 60);
+            const ytEntries  = entries.filter(e => e.platform === "youtube" && ((e as unknown as {durationSeconds?:number}).durationSeconds ?? 999) > 60);
+            const ytsEntries = entries.filter(e => e.platform === "youtube_short" || (e.platform === "youtube" && ((e as unknown as {durationSeconds?:number}).durationSeconds ?? 999) <= 60));
             const ttEntries  = entries.filter(e => e.platform === "tiktok");
             const igEntries  = entries.filter(e => e.platform === "instagram" || (e.platform !== "youtube" && e.platform !== "tiktok" && e.platform !== "youtube_short"));
 

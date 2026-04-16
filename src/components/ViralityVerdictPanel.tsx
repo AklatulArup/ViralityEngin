@@ -220,7 +220,6 @@ export default function ViralityVerdictPanel({ video, channel, channelMedian, re
 
     setAiLoading(false);
   }
-  }
 
   return (
     <div className="glass-card" style={{ overflow: "hidden", marginBottom: 4 }}>
@@ -437,3 +436,4 @@ export default function ViralityVerdictPanel({ video, channel, channelMedian, re
       </div>
     </div>
   );
+}

@@ -56,11 +56,10 @@ const FIELD_MAP: Record<string, string> = {
   shares:"shares", share_count:"shares", reposts:"shares", retweets:"shares",
   saves:"saves", bookmarks:"saves",
   // Instagram native export aliases
-  plays:"views", video_plays:"views", reel_plays:"views",
+  video_plays:"views", reel_plays:"views",
   accounts_reached:"views", unique_accounts_reached:"views",
-  post_impressions:"views", story_impressions:"views",
-  post_id:"id_hint", post_type:"platform_hint", post_url:"url",
-  reel_id:"id_hint", media_url:"url", shortcode:"id_hint",
+  story_impressions:"views",
+  post_id:"id_hint", post_type:"platform_hint",   reel_id:"id_hint", shortcode:"id_hint",
   profile_visits:"saves", profile_activity:"saves",
   // TikTok native export aliases
   video_id:"id_hint", sound_name:"tags",
@@ -68,10 +67,10 @@ const FIELD_MAP: Record<string, string> = {
   full_video_watched_rate:"engagement",
   // YouTube Studio export aliases
   video_id_yt:"id_hint", content_type:"platform_hint",
-  video_views:"views", watch_time_hours:"duration",
-  average_view_duration:"duration", average_view_percentage:"engagement",
+  yt_video_views:"views", watch_time_hours:"duration",
+  average_view_duration2:"duration", average_view_percentage:"engagement",
   subscribers_gained:"saves", subscribers_lost:"shares",
-  date:"date", published_at:"date", post_date:"date", upload_date:"date",
+  dt_date:"date", published_at:"date", post_date:"date", upload_date:"date",
   created_at:"date", publish_date:"date", video_date:"date", timestamp:"date",
   channel:"channel", creator:"channel", username:"channel", handle:"channel",
   account:"channel", author:"channel", channel_name:"channel", creator_name:"channel",
@@ -237,7 +236,7 @@ export async function POST(req: NextRequest) {
       id, type: "video", platform: storePlatform,
       name: title, channelId: videoStub.channelId, channelName: channel,
       analyzedAt: now,
-      metrics: { views, likes, comments, shares, saves, engagement: parseFloat(eng.toFixed(2)), vrsScore: vrs.estimatedFullScore, publishedAt },
+      metrics: { views, engagement: parseFloat(eng.toFixed(2)), vrsScore: vrs.estimatedFullScore },
       archetypes, tags: tags.slice(0, 20),
       durationSeconds: durSecs, duration: row.duration ?? "",
     };
@@ -249,7 +248,7 @@ export async function POST(req: NextRequest) {
     hist.entries.unshift({
       id: `${id}_csv`, url: url || `csv:${id}`, platform, title, channelName: channel,
       channelId: videoStub.channelId, checkedAt: now, firstCheckedAt: now,
-      metrics: { views, likes, comments, engagement: parseFloat(eng.toFixed(2)), vrsScore: vrs.estimatedFullScore },
+      metrics: { views, engagement: parseFloat(eng.toFixed(2)), vrsScore: vrs.estimatedFullScore },
     });
 
     results.push({ row: i + 2, status: "ok", platform, title: title.slice(0, 60), message: `VRS ${vrs.estimatedFullScore} · ${eng.toFixed(1)}% eng · +${newKeywords.length} kw` });

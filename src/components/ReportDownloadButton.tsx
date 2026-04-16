@@ -142,9 +142,10 @@ function buildReportHTML(data: ReportData): string {
 
     // VRS Breakdown
     if (v.vrs.criteria && v.vrs.criteria.length > 0) {
-      const critRows = v.vrs.criteria.map(c => [
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const critRows = (v.vrs.criteria as any[]).map((c: any) => [
         c.label ?? c.id ?? "—",
-        `${c.score ?? 0}/${c.weight ?? 0}`,
+        `${(c.score ?? 0)}/${(c.weight ?? 0)}`,
         c.rationale ?? "—",
       ]);
       body += section("Viral Readiness Score (VRS) Breakdown", `
@@ -154,7 +155,7 @@ function buildReportHTML(data: ReportData): string {
         </div>
         ${v.vrs.topFixes && v.vrs.topFixes.length > 0 ? `
           <div class="subsection-title">Top Improvement Areas</div>
-          <ul class="fix-list">${v.vrs.topFixes.map((f: string) => `<li>${f}</li>`).join("")}</ul>
+          <ul class="fix-list">${(v.vrs.topFixes as unknown as string[]).map((f: string) => `<li>${f}</li>`).join("")}</ul>
         ` : ""}
         ${critRows.length > 0 ? table(["Criterion", "Score", "Signal"], critRows) : ""}
       `, scoreColor(v.vrs.estimatedFullScore));
@@ -331,9 +332,9 @@ function buildReportHTML(data: ReportData): string {
           ["Creator", "Videos", "Avg Views", "Avg VRS Score"],
           result.competitorBreakdown.slice(0, 15).map(c => [
             c.handle,
-            c.videoCount,
+            String(c.videoCount),
             formatNumber(c.avgViews),
-            c.avgScore,
+            String(c.avgScore),
           ])
         )}
       `, "#A78BFA");

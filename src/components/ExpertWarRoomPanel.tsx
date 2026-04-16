@@ -128,10 +128,7 @@ function stripMd(text: string): string {
     .replace(/\*(.+?)\*/g, "$1")           // *italic*
     .replace(/^[-*]\s+/gm, "")            // bullet points
     .replace(/`(.+?)`/g, "$1")            // `code`
-    .replace(/
-{3,}/g, "
-
-")           // triple newlines
+    .replace(/\n{3,}/g, "\n\n")         // triple newlines
     .trim();
 }
 

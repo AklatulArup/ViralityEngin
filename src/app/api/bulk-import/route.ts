@@ -45,13 +45,9 @@ function enrichEntry(v: VideoData, platform: "youtube" | "tiktok" = "youtube"): 
     metrics: {
       ...entry.metrics,
       views:      v.views,
-      likes:      v.likes,
-      comments:   v.comments,
-      velocity:   Math.round(vel),
       engagement: parseFloat(eng.toFixed(2)),
       vrsScore:   vrs.estimatedFullScore,
-      daysOld:    days,
-      publishedAt: v.publishedAt,
+      velocity:   Math.round(vel),
     },
     tags: (v.tags ?? []).slice(0, 20),
   };
