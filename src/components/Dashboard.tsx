@@ -1245,27 +1245,38 @@ export default function Dashboard() {
           )}
 
           {inputTab === "instagram" && (
-            <div className="flex-1 flex flex-col gap-2">
-              {/* Instagram accuracy warning */}
-              <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg" style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)" }}>
-                <span style={{ fontSize: 12, flexShrink: 0 }}>⚠️</span>
-                <span className="font-mono" style={{ fontSize: 9, color: "#F59E0B", letterSpacing: "0.05em", lineHeight: 1.5 }}>
-                  <strong>Instagram scraping returns public data only.</strong> For accurate Plays, Reach & Saves, export your analytics CSV from Instagram Insights and use <span style={{ color: "#2ECC8A" }}>Bulk CSV Import</span> instead.
-                </span>
-              </div>
-              <div className="flex gap-2.5 items-center">
+            <div className="flex-1 flex items-center gap-3">
+              {/* Full-width Instagram notice — replaces input since scraping is unreliable */}
               <div
-                className="flex-1 flex items-center gap-3 rounded-xl overflow-hidden transition-all duration-200"
-                style={{ height: 44, padding: "0 14px", background: "rgba(4,4,2,0.90)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 12px rgba(0,0,0,0.4)" }}
+                className="flex-1 flex items-center gap-4 rounded-xl px-4"
+                style={{ height: 44, background: "rgba(225,48,108,0.06)", border: "1px solid rgba(225,48,108,0.22)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E1306C" strokeWidth="1.8" style={{ flexShrink: 0, opacity: 0.85 }}>
+                <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span className="font-mono" style={{ fontSize: 10, color: "#F0A0B8", letterSpacing: "0.04em" }}>
+                    <strong style={{ color: "#F59E0B" }}>Instagram scraping returns public data only</strong>
+                    <span style={{ color: "rgba(240,160,184,0.7)" }}> — Plays, Reach & Saves are unavailable via URL. </span>
+                    <span style={{ color: "#2ECC8A", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}
+                      onClick={() => setActivePanel("bulk-import" as typeof activePanel)}>
+                      Use Bulk CSV Import
+                    </span>
+                    <span style={{ color: "rgba(240,160,184,0.5)" }}> to import your Instagram Insights export.</span>
+                  </span>
+                </div>
+              </div>
+              {/* Still allow URL entry in a compact secondary input */}
+              <div
+                className="flex items-center gap-2 rounded-xl px-3 shrink-0"
+                style={{ height: 44, width: 260, background: "rgba(4,4,2,0.90)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E1306C" strokeWidth="1.8" style={{ flexShrink: 0, opacity: 0.6 }}>
                   <rect x="2" y="2" width="20" height="20" rx="5.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="18.5" cy="5.5" r="1.5" fill="#E1306C"/>
                 </svg>
                 <input type="text" value={instagramInput}
                   onChange={e => setInstagramInput(e.target.value)}
-                  placeholder="@handle or instagram.com/reel/…"
+                  placeholder="@handle (limited data)"
                   className="flex-1 bg-transparent border-none outline-none"
-                  style={{ fontSize: 13.5, color: "#E8E6E1", caretColor: "#E1306C" }}
+                  style={{ fontSize: 12, color: "#9E9C97", caretColor: "#E1306C" }}
                   onKeyDown={e => {
                     if (e.key === "Enter" && instagramInput.trim()) {
                       const v = instagramInput.trim();
@@ -1278,24 +1289,13 @@ export default function Dashboard() {
                 onClick={() => { const v = instagramInput.trim(); if (!v) return; analyze(v.includes("instagram.com") ? v : `https://www.instagram.com/${v.replace(/^@/, "")}/`); }}
                 disabled={loading || !instagramInput.trim()}
                 className="shrink-0 flex items-center gap-2 font-semibold rounded-xl"
-                style={{ height: 44, padding: "0 22px", fontSize: 13, cursor: loading || !instagramInput.trim() ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, transition: "all 0.2s",
-                  background: instagramInput.trim() ? "linear-gradient(135deg, #9D174D, #E1306C)" : "rgba(255,255,255,0.06)",
-                  color: instagramInput.trim() ? "#fff" : "#4A4845",
-                  border: instagramInput.trim() ? "1px solid rgba(225,48,108,0.5)" : "1px solid rgba(255,255,255,0.08)",
-                  boxShadow: instagramInput.trim() ? "inset 0 1px 0 rgba(255,255,255,0.22), 0 0 20px rgba(225,48,108,0.55), 0 0 60px rgba(225,48,108,0.22)" : "none",
+                style={{ height: 44, padding: "0 16px", fontSize: 12, cursor: loading || !instagramInput.trim() ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, transition: "all 0.2s",
+                  background: "rgba(225,48,108,0.12)", color: "#E1306C",
+                  border: "1px solid rgba(225,48,108,0.3)",
                 }}
               >
-                {loading ? <span className="orbital-loader" style={{ borderTopColor: "#E1306C" }} /> : "Analyze"}
+                {loading ? <span className="orbital-loader" style={{ borderTopColor: "#E1306C", width: 12, height: 12 }} /> : "Analyze"}
               </button>
-              <button
-                onClick={() => saveInstagram(instagramInput.split("\n"))}
-                disabled={!instagramInput.trim()}
-                className="btn-ghost shrink-0"
-                style={{ height: 44, padding: "0 14px" }}
-              >
-                Queue
-              </button>
-              </div>
             </div>
           )}
 

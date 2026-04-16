@@ -33,7 +33,6 @@ import ThumbnailPanel from "./ThumbnailPanel";
 import CompetitorGapPanel from "./CompetitorGapPanel";
 import TagCorrelationPanel from "./TagCorrelationPanel";
 import UploadCadencePanel from "./UploadCadencePanel";
-import ViralityVerdictPanel from "./ViralityVerdictPanel";
 import ExpertWarRoomPanel from "./ExpertWarRoomPanel";
 
 interface VideoResultProps {
