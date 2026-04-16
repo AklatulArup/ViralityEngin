@@ -437,4 +437,3 @@ export default function ViralityVerdictPanel({ video, channel, channelMedian, re
       </div>
     </div>
   );
-}
