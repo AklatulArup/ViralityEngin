@@ -228,6 +228,90 @@ function CircuitNode({ color, size = 4 }: { color: string; size?: number }) {
   );
 }
 
+
+// ── Lifecycle stage per platform ──────────────────────────────────────────────
+function getLifecycleStage(video: EnrichedVideo, platform: string) {
+  const { days, velocity, vsBaseline } = video;
+  const secs = video.durationSeconds ?? 0;
+  const isShort = secs <= 60 || platform === "youtube_short" || platform === "tiktok" || platform === "instagram";
+
+  if (isShort) {
+    // Short-form lifecycle is compressed
+    if (days <= 1)  return { stage: "LAUNCH WINDOW",    color: "#E879F9", icon: "◈", desc: "First 24h — algorithm sampling" };
+    if (days <= 3)  return { stage: "PEAK WINDOW",      color: "#FF4D6A", icon: "▲", desc: "Days 2–3 — max distribution" };
+    if (days <= 7)  return { stage: "RESIDUAL PUSH",    color: "#F59E0B", icon: "◆", desc: "Days 4–7 — tail distribution" };
+    if (days <= 14) return { stage: "SEARCH PHASE",     color: "#60A5FA", icon: "◎", desc: "Week 2 — search-dependent reach" };
+    return           { stage: "EVERGREEN",              color: "#2ECC8A", icon: "✦", desc: "14d+ — passive discovery only" };
+  } else {
+    // Long-form lifecycle
+    if (days <= 2)  return { stage: "48H SEED PHASE",   color: "#E879F9", icon: "◈", desc: "Algorithm sampling initial engagement" };
+    if (days <= 7)  {
+      if (vsBaseline >= 3) return { stage: "VIRAL EXPANSION",  color: "#FF4D6A", icon: "🔥", desc: "Breaking out of subscriber base" };
+      if (vsBaseline >= 1.5) return { stage: "RESONANCE PHASE", color: "#F59E0B", icon: "⚡", desc: "Algorithm testing broader distribution" };
+      return { stage: "EARLY PLATEAU",   color: "#6B6860", icon: "—",  desc: "Limited expansion signal" };
+    }
+    if (days <= 30) {
+      if (velocity > 5000) return { stage: "SUSTAINED PUSH",   color: "#60A5FA", icon: "▶", desc: "Algorithm maintaining distribution" };
+      return { stage: "DECAY PHASE",     color: "#F97316", icon: "↘", desc: "Velocity declining toward baseline" };
+    }
+    if (days <= 90) return { stage: "REFERENCE CONTENT", color: "#A78BFA", icon: "◉", desc: "Search-driven, not recommended" };
+    return           { stage: "ARCHIVE",                 color: "#4A4845", icon: "⊟", desc: "Historical value only" };
+  }
+}
+
+// ── Virality tier ─────────────────────────────────────────────────────────────
+function getViralityTier(video: EnrichedVideo) {
+  const { vsBaseline, vrs, engagement, days, velocity } = video;
+  const vrsScore = vrs.estimatedFullScore;
+  const commentRate = video.views > 0 ? (video.comments / video.views) * 1000 : 0;
+
+  // Composite virality score
+  const score =
+    (vsBaseline >= 5 ? 40 : vsBaseline >= 3 ? 30 : vsBaseline >= 2 ? 20 : vsBaseline >= 1.5 ? 12 : 5) +
+    (vrsScore >= 80 ? 25 : vrsScore >= 65 ? 18 : vrsScore >= 50 ? 10 : 4) +
+    (engagement >= 10 ? 20 : engagement >= 6 ? 14 : engagement >= 3 ? 8 : 3) +
+    (commentRate >= 5 ? 15 : commentRate >= 2 ? 10 : commentRate >= 0.8 ? 5 : 1);
+
+  if (score >= 85) return { tier: "VIRAL",        level: 1, color: "#FF4D6A", glow: "rgba(255,77,106,0.5)",  icon: "🔥", desc: "Breaking out of niche — algorithm actively amplifying" };
+  if (score >= 65) return { tier: "BREAKOUT",     level: 2, color: "#F59E0B", glow: "rgba(245,158,11,0.4)", icon: "⚡", desc: "Strong signals — nearing broader distribution" };
+  if (score >= 45) return { tier: "RESONANT",     level: 3, color: "#60A5FA", glow: "rgba(96,165,250,0.35)",icon: "◈", desc: "Performing above baseline — algorithm interested" };
+  if (score >= 28) return { tier: "CIRCULATING",  level: 4, color: "#A78BFA", glow: "rgba(167,139,250,0.3)",icon: "◆", desc: "Steady distribution within existing audience" };
+  if (score >= 15) return { tier: "CONTAINED",    level: 5, color: "#6B6860", glow: "rgba(107,104,96,0.2)", icon: "○", desc: "Limited to subscriber base — no expansion signal" };
+  return             { tier: "SUPPRESSED",        level: 6, color: "#FF4D6A33" as string, glow: "rgba(255,77,106,0.15)", icon: "✗", desc: "Algorithm not distributing — signals too weak" };
+}
+
+// ── Content type tier ─────────────────────────────────────────────────────────
+function getContentTypeTier(video: EnrichedVideo, platform: string) {
+  const secs = video.durationSeconds ?? 0;
+  const title = video.title.toLowerCase();
+  const eng = video.engagement;
+
+  // Format
+  const format = secs <= 60 ? "SHORT-FORM" : secs <= 600 ? "MID-FORM" : secs <= 1800 ? "LONG-FORM" : "DEEP-DIVE";
+
+  // Content archetype from title signals
+  const isControversy  = /banned|exposed|scam|fraud|worst|never|secret|hiding/i.test(title);
+  const isProof        = /proof|payout|result|made|earned|\$/i.test(title);
+  const isTutorial     = /how to|guide|step|beginner|learn|strategy/i.test(title);
+  const isReview       = /review|test|tried|honest|vs/i.test(title);
+  const isPersonal     = /my |i |story|journey|day|week|month/i.test(title);
+
+  const archetype = isControversy ? "CONTROVERSY" : isProof ? "PROOF/RESULT" : isTutorial ? "TUTORIAL" : isReview ? "REVIEW" : isPersonal ? "PERSONAL" : "INFORMATIONAL";
+
+  // Algorithm fit score for this format on this platform
+  const platformFit: Record<string, Record<string, number>> = {
+    youtube:        { "SHORT-FORM": 45, "MID-FORM": 85, "LONG-FORM": 78, "DEEP-DIVE": 52 },
+    youtube_short:  { "SHORT-FORM": 95, "MID-FORM": 30, "LONG-FORM": 15, "DEEP-DIVE": 10 },
+    tiktok:         { "SHORT-FORM": 95, "MID-FORM": 55, "LONG-FORM": 25, "DEEP-DIVE": 10 },
+    instagram:      { "SHORT-FORM": 90, "MID-FORM": 60, "LONG-FORM": 20, "DEEP-DIVE": 8  },
+  };
+  const fit = platformFit[platform]?.[format] ?? 50;
+  const fitLabel = fit >= 80 ? "OPTIMAL FIT" : fit >= 60 ? "GOOD FIT" : fit >= 40 ? "MODERATE FIT" : "POOR FIT";
+  const fitColor = fit >= 80 ? "#2ECC8A" : fit >= 60 ? "#60A5FA" : fit >= 40 ? "#F59E0B" : "#FF4D6A";
+
+  return { format, archetype, fit, fitLabel, fitColor };
+}
+
 function streamWords(text: string, onWord: (w:string[])=>void, onDone: ()=>void) {
   const words = text.split(" "); let i = 0; const cur: string[] = [];
   return setInterval(() => {
@@ -448,6 +532,99 @@ export default function ExpertWarRoomPanel({ video, channel, channelMedian, rece
                   </div>
                 </div>
               </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Intelligence Chips ── */}
+        {(()=>{
+          const secs = video.durationSeconds ?? 0;
+          const plt  = secs <= 60 ? "youtube_short" : "youtube";
+          const lifecycle  = getLifecycleStage(video, plt);
+          const viralTier  = getViralityTier(video);
+          const contentType = getContentTypeTier(video, plt);
+          return (
+            <div className="flex flex-wrap gap-2 mb-5">
+
+              {/* Lifecycle chip */}
+              <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{
+                background: `${lifecycle.color}10`,
+                border: `1px solid ${lifecycle.color}30`,
+                boxShadow: `0 0 12px ${lifecycle.color}18`,
+              }}>
+                <span style={{ fontSize: 12 }}>{lifecycle.icon}</span>
+                <div>
+                  <div className="font-mono font-bold" style={{ fontSize: 8, color: lifecycle.color, letterSpacing: "0.12em" }}>
+                    VIDEO LIFECYCLE
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 10, color: "#E8E6E1", fontWeight: 600 }}>
+                    {lifecycle.stage}
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 8, color: "#6B6860" }}>{lifecycle.desc}</div>
+                </div>
+              </div>
+
+              {/* Virality tier chip */}
+              <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{
+                background: `${viralTier.color}10`,
+                border: `1px solid ${viralTier.color}30`,
+                boxShadow: `0 0 16px ${viralTier.glow}`,
+                position: "relative", overflow: "hidden",
+              }}>
+                {viralTier.level <= 2 && (
+                  <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 0% 50%, ${viralTier.color}08, transparent 70%)`, pointerEvents: "none" }} />
+                )}
+                <span style={{ fontSize: 13 }}>{viralTier.icon}</span>
+                <div>
+                  <div className="font-mono font-bold" style={{ fontSize: 8, color: viralTier.color, letterSpacing: "0.12em" }}>
+                    VIRALITY — TIER {viralTier.level}
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 10, color: "#E8E6E1", fontWeight: 600 }}>
+                    {viralTier.tier}
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 8, color: "#6B6860" }}>{viralTier.desc}</div>
+                </div>
+              </div>
+
+              {/* Content format + fit chip */}
+              <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{
+                background: `${contentType.fitColor}08`,
+                border: `1px solid ${contentType.fitColor}25`,
+              }}>
+                <div style={{ width: 8, height: 28, borderRadius: 99, background: contentType.fitColor, boxShadow: `0 0 8px ${contentType.fitColor}`, flexShrink: 0 }} />
+                <div>
+                  <div className="font-mono font-bold" style={{ fontSize: 8, color: contentType.fitColor, letterSpacing: "0.12em" }}>
+                    {contentType.format} · {contentType.archetype}
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 10, color: "#E8E6E1", fontWeight: 600 }}>
+                    {contentType.fitLabel}
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 8, color: "#6B6860" }}>
+                    {contentType.fit}% platform-format fit
+                  </div>
+                </div>
+              </div>
+
+              {/* Day marker chip */}
+              <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}>
+                <div style={{ textAlign: "center" }}>
+                  <div className="font-mono font-bold" style={{ fontSize: 20, color: "#E8E6E1", lineHeight: 1 }}>
+                    {video.days}
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 8, color: "#5E5A57", letterSpacing: "0.1em" }}>DAYS OLD</div>
+                </div>
+                <div style={{ width: 1, height: 32, background: "rgba(255,255,255,0.08)" }} />
+                <div>
+                  <div className="font-mono font-bold" style={{ fontSize: 11, color: "#60A5FA" }}>
+                    {video.vrs.estimatedFullScore}/100
+                  </div>
+                  <div className="font-mono" style={{ fontSize: 8, color: "#5E5A57", letterSpacing: "0.08em" }}>VRS SCORE</div>
+                </div>
+              </div>
+
             </div>
           );
         })()}
