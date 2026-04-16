@@ -83,6 +83,7 @@ import type { Competitor } from "./CompetitorBankManager";
 import CreatorBlocklist from "./CreatorBlocklist";
 import ViewForecastPanel from "./ViewForecastPanel";
 import BulkCSVImportPanel from "./BulkCSVImportPanel";
+import HistoryCalendar from "./HistoryCalendar";
 import ExpertWarRoomPanel from "./ExpertWarRoomPanel";
 import ReportDownloadButton from "./ReportDownloadButton";
 import StarfieldCanvas from "./StarfieldCanvas";
@@ -139,7 +140,7 @@ export default function Dashboard() {
   const [instagramStatus, setInstagramStatus] = useState("");
   const [tiktokInputVal, setTiktokInputVal] = useState("");
   const [youtubeShortInput, setYoutubeShortInput] = useState("");
-  const [activePanel, setActivePanel] = useState<"libraries" | "ref-tools" | "reverse-engineer" | "bulk-import" | null>(null);
+  const [activePanel, setActivePanel] = useState<"libraries" | "ref-tools" | "reverse-engineer" | "bulk-import" | "calendar" | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [warRoomTimeframe, setWarRoomTimeframe] = useState<"7d"|"30d"|"90d"|"6m">("30d");
   const [history, setHistory]   = useState<HistoryEntry[]>([]);
@@ -1085,6 +1086,26 @@ export default function Dashboard() {
             );
           })()}
 
+          {/* Calendar History */}
+          {(()=>{
+            const active = activePanel === "calendar";
+            return (
+              <button
+                onClick={() => setActivePanel(active ? null : "calendar" as typeof activePanel)}
+                className="nav-item w-full text-left px-3 py-2.5 rounded-lg mb-0.5 cursor-pointer"
+                style={{ borderLeftColor: active ? "#60A5FA" : "transparent" }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span style={{ color: active ? "#60A5FA" : "#3A3835", fontSize: 13 }}>📅</span>
+                  <div className="flex-1">
+                    <div style={{ fontSize: 12, fontWeight: 500, color: active ? "#E8E6E1" : "#9E9C97" }}>History Calendar</div>
+                    <div style={{ fontSize: 10, color: "#5E5A57", marginTop: 1 }}>Views · Likes · Shares by date</div>
+                  </div>
+                </div>
+              </button>
+            );
+          })()}
+
           {/* Libraries / Reference Tools */}
           {([ 
             { id: "libraries" as const,  label: "Libraries",       icon: "◧", desc: "Keywords · Tags · Competitors" },
@@ -1415,6 +1436,17 @@ export default function Dashboard() {
                 <button onClick={() => setActivePanel(null)} className="btn-ghost">✕ Close</button>
               </div>
               <BulkCSVImportPanel onComplete={() => { setRefStoreStatus("saved"); refreshReferenceStore(); }} />
+            </div>
+          )}
+
+          {/* ── Calendar panel ── */}
+          {!loading && activePanel === ("calendar" as typeof activePanel) && (
+            <div className="mb-5 fade-up">
+              <HistoryCalendar
+                history={history}
+                referenceStore={referenceStore}
+                onVideoClick={(url) => { setActivePanel(null); analyze(url); }}
+              />
             </div>
           )}
 
