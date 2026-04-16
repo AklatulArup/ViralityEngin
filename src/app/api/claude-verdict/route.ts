@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const errors: string[] = [];
 
   // ── 1. Gemini (primary) ────────────────────────────────────────────────────
-  const geminiKey = process.env.GEMINI_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_2;
   if (geminiKey) {
     for (const model of ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]) {
       try {
