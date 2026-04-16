@@ -172,6 +172,52 @@ function FloatingKeyword({ word, color, delay }: { word: string; color: string; 
   ) : null;
 }
 
+
+// VRS tier classification
+function getVRSTier(score: number) {
+  if (score >= 80) return { label: "TIER 1 — EXCELLENT", color: "#2ECC8A", glow: "rgba(46,204,138,0.4)",  desc: "Algorithm will actively push this into non-subscriber feeds" };
+  if (score >= 65) return { label: "TIER 2 — STRONG",   color: "#60A5FA", glow: "rgba(96,165,250,0.35)", desc: "Solid distribution signal — expect steady algorithmic support" };
+  if (score >= 50) return { label: "TIER 3 — COMPETITIVE", color: "#F59E0B", glow: "rgba(245,158,11,0.30)", desc: "In the algorithm's consideration set — needs stronger signals to break out" };
+  if (score >= 35) return { label: "TIER 4 — NEEDS WORK", color: "#F97316", glow: "rgba(249,115,22,0.28)", desc: "Limited algorithmic push — fix retention and CTR signals first" };
+  return        { label: "TIER 5 — REWORK",     color: "#FF4D6A", glow: "rgba(255,77,106,0.35)", desc: "Algorithm is suppressing this content — significant changes needed" };
+}
+
+// Predicted tier based on momentum
+function getPredictedTier(video: EnrichedVideo, forecastDays: number) {
+  const current = video.vrs.estimatedFullScore;
+  const momentumBoost = video.isOutlier ? Math.min(15, forecastDays * 0.3) : video.vsBaseline > 1.5 ? Math.min(8, forecastDays * 0.15) : 0;
+  const decayPenalty  = video.days > 30 ? Math.min(10, (video.days - 30) * 0.2) : 0;
+  const predicted = Math.max(0, Math.min(100, Math.round(current + momentumBoost - decayPenalty)));
+  return { score: predicted, tier: getVRSTier(predicted), delta: predicted - current };
+}
+
+
+// Futuristic scan line component
+function ScanLine({ color }: { color: string }) {
+  return (
+    <div style={{
+      position: "absolute", top: 0, left: 0, right: 0, height: 1,
+      background: `linear-gradient(90deg, transparent 0%, ${color}88 30%, ${color} 50%, ${color}88 70%, transparent 100%)`,
+      backgroundSize: "200% 100%",
+      animation: "cosmicShimmer 1.2s linear infinite",
+      opacity: 0.9,
+      zIndex: 3,
+    }} />
+  );
+}
+
+// Circuit node decoration
+function CircuitNode({ color, size = 4 }: { color: string; size?: number }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: color, boxShadow: `0 0 ${size*2}px ${color}, 0 0 ${size*4}px ${color}55`,
+      flexShrink: 0,
+      animation: "pulseDot 2s ease-in-out infinite",
+    }} />
+  );
+}
+
 function streamWords(text: string, onWord: (w:string[])=>void, onDone: ()=>void) {
   const words = text.split(" "); let i = 0; const cur: string[] = [];
   return setInterval(() => {
@@ -252,19 +298,32 @@ export default function ExpertWarRoomPanel({ video, channel, channelMedian, rece
 
   return (
     <div className="glass-card" style={{ overflow:"hidden" }}>
-      <div style={{ height:2, background:"linear-gradient(90deg,#60A5FA,#2ECC8A,#A78BFA,#F59E0B)" }} />
+      <div style={{ height:2, background:"linear-gradient(90deg,transparent,#60A5FA,#2ECC8A,#A78BFA,#F59E0B,transparent)", backgroundSize:"200% 100%", animation:"cosmicShimmer 4s linear infinite" }} />
+      {/* Subtle grid overlay */}
+      <div style={{position:"absolute",inset:0,backgroundImage:"repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,0.015) 39px,rgba(255,255,255,0.015) 40px),repeating-linear-gradient(90deg,transparent,transparent 79px,rgba(255,255,255,0.015) 79px,rgba(255,255,255,0.015) 80px)",pointerEvents:"none",zIndex:0}} />
       <div style={{ padding:"20px 24px" }}>
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span style={{fontSize:18}}>⚔</span>
-              <h3 style={{fontSize:15,fontWeight:700,color:"#E8E6E1",letterSpacing:"-0.01em"}}>Expert War Room</h3>
+            <div className="flex items-center gap-2 mb-1.5">
+              <div style={{
+                width:32,height:32,borderRadius:8,
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,
+                background:"linear-gradient(135deg,rgba(255,77,106,0.2),rgba(245,158,11,0.12))",
+                border:"1px solid rgba(255,77,106,0.35)",
+                boxShadow:phase!=="idle"?"0 0 24px rgba(255,77,106,0.35)":"0 0 10px rgba(255,77,106,0.12)",
+                transition:"box-shadow 0.4s",
+              }}>⚔</div>
+              <div>
+                <h3 style={{fontSize:15,fontWeight:700,color:"#E8E6E1",letterSpacing:"-0.01em",lineHeight:1}}>Expert War Room</h3>
+                <div className="font-mono flex items-center gap-1.5" style={{fontSize:8,color:"#5E5A57",letterSpacing:"0.1em",marginTop:2}}>
+                  {["ALGORITHM","STRATEGY","PSYCHOLOGY","COMPETITION"].map((l,i)=>(
+                    <span key={i} style={{color:["#60A5FA","#2ECC8A","#A78BFA","#F59E0B"][i],opacity:phase!=="idle"?1:0.4,transition:"opacity 0.3s",transitionDelay:`${i*0.1}s`}}>{l}</span>
+                  ))}
+                </div>
+              </div>
             </div>
-            <p className="font-mono" style={{fontSize:9,color:"#5E5A57",letterSpacing:"0.08em"}}>
-              4 INDUSTRY EXPERTS · DELIBERATE · CONTRADICT · VERDICT
-            </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap justify-end">
             <div className="flex items-center gap-2">
@@ -309,25 +368,67 @@ export default function ExpertWarRoomPanel({ video, channel, channelMedian, rece
           </div>
         </div>
 
-        {/* Forecast strip */}
-        {phase!=="idle"&&(
-          <div className="flex items-center gap-4 mb-5 px-4 py-2.5 rounded-lg" style={{background:"rgba(0,0,0,0.25)",border:"1px solid rgba(255,255,255,0.07)"}}>
-            <span className="font-mono" style={{fontSize:9,color:"#5E5A57",letterSpacing:"0.1em"}}>{forecastDays}D FORECAST</span>
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono font-bold" style={{fontSize:14,color:"#2ECC8A"}}>{formatNumber(fTotal)}</span>
-              <span className="font-mono" style={{fontSize:10,color:"#5E5A57"}}>projected total</span>
+        {/* Forecast strip + VRS tiers */}
+        {phase!=="idle"&&(()=>{
+          const currentTier = getVRSTier(video.vrs.estimatedFullScore);
+          const predicted   = getPredictedTier(video, forecastDays);
+          return (
+            <div className="space-y-2 mb-5">
+              {/* Forecast numbers */}
+              <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg" style={{background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.08)",position:"relative",overflow:"hidden"}}>
+                <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg,transparent,rgba(96,165,250,0.3),transparent)"}} />
+                <span className="font-mono" style={{fontSize:9,color:"#5E5A57",letterSpacing:"0.1em"}}>{forecastDays}D FORECAST</span>
+                <div className="flex items-center gap-1.5">
+                  <CircuitNode color="#2ECC8A" />
+                  <span className="font-mono font-bold" style={{fontSize:14,color:"#2ECC8A",textShadow:"0 0 12px #2ECC8A88"}}>{formatNumber(fTotal)}</span>
+                  <span className="font-mono" style={{fontSize:10,color:"#5E5A57"}}>projected total</span>
+                </div>
+                <div style={{width:1,height:16,background:"rgba(255,255,255,0.08)"}} />
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-bold" style={{fontSize:13,color:"#60A5FA",textShadow:"0 0 10px #60A5FA77"}}>+{formatNumber(fAdd)}</span>
+                  <span className="font-mono" style={{fontSize:10,color:"#5E5A57"}}>additional views</span>
+                </div>
+                <div style={{width:1,height:16,background:"rgba(255,255,255,0.08)"}} />
+                <span className="font-mono" style={{fontSize:9,color:video.days<3?"#F59E0B":video.days<7?"#60A5FA":"#2ECC8A"}}>
+                  ◆ {video.days<3?"LOW CONFIDENCE":video.days<7?"MEDIUM CONFIDENCE":"HIGH CONFIDENCE"}
+                </span>
+              </div>
+              {/* VRS Tier row */}
+              <div className="flex items-stretch gap-2">
+                {/* Current tier */}
+                <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-lg" style={{background:"rgba(0,0,0,0.25)",border:`1px solid ${currentTier.color}30`,boxShadow:`0 0 20px ${currentTier.glow.replace("0.4","0.08")}`}}>
+                  <div style={{width:2,alignSelf:"stretch",borderRadius:99,background:currentTier.color,boxShadow:`0 0 8px ${currentTier.color}`,flexShrink:0}} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono" style={{fontSize:8,color:"#5E5A57",letterSpacing:"0.12em",marginBottom:3}}>CURRENT VRS TIER</div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono font-bold" style={{fontSize:11,color:currentTier.color,textShadow:`0 0 10px ${currentTier.color}88`,letterSpacing:"0.08em"}}>{currentTier.label}</span>
+                      <span className="font-mono font-bold" style={{fontSize:13,color:currentTier.color}}>{video.vrs.estimatedFullScore}/100</span>
+                    </div>
+                    <div className="font-mono" style={{fontSize:9,color:"#6B6860",lineHeight:1.5}}>{currentTier.desc}</div>
+                  </div>
+                </div>
+                {/* Arrow */}
+                <div className="flex items-center justify-center shrink-0" style={{color:predicted.delta>0?"#2ECC8A":predicted.delta<0?"#FF4D6A":"#5E5A57",fontSize:18}}>
+                  {predicted.delta>0?"→":predicted.delta<0?"↘":"→"}
+                </div>
+                {/* Predicted tier */}
+                <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-lg" style={{background:"rgba(0,0,0,0.25)",border:`1px solid ${predicted.tier.color}25`,position:"relative",overflow:"hidden"}}>
+                  <div style={{position:"absolute",inset:0,background:`radial-gradient(ellipse at 0% 50%, ${predicted.tier.color}06, transparent 70%)`,pointerEvents:"none"}} />
+                  <div style={{width:2,alignSelf:"stretch",borderRadius:99,background:`${predicted.tier.color}66`,flexShrink:0}} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono" style={{fontSize:8,color:"#5E5A57",letterSpacing:"0.12em",marginBottom:3}}>PREDICTED IN {forecastDays}D</div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono font-bold" style={{fontSize:11,color:predicted.tier.color,letterSpacing:"0.08em"}}>{predicted.tier.label}</span>
+                      <span className="font-mono font-bold" style={{fontSize:13,color:predicted.tier.color}}>{predicted.score}/100</span>
+                      {predicted.delta!==0&&<span className="font-mono" style={{fontSize:10,color:predicted.delta>0?"#2ECC8A":"#FF4D6A"}}>({predicted.delta>0?"+":""}{predicted.delta})</span>}
+                    </div>
+                    <div className="font-mono" style={{fontSize:9,color:"#6B6860",lineHeight:1.5}}>{predicted.tier.desc}</div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div style={{width:1,height:16,background:"rgba(255,255,255,0.08)"}} />
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono font-bold" style={{fontSize:13,color:"#60A5FA"}}>+{formatNumber(fAdd)}</span>
-              <span className="font-mono" style={{fontSize:10,color:"#5E5A57"}}>additional views</span>
-            </div>
-            <div style={{width:1,height:16,background:"rgba(255,255,255,0.08)"}} />
-            <span className="font-mono" style={{fontSize:9,color:"#5E5A57"}}>
-              Confidence: {video.days<3?"LOW":video.days<7?"MEDIUM":"HIGH"}
-            </span>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Expert cards */}
         {Object.keys(opinions).length>0&&(
@@ -344,14 +445,28 @@ export default function ExpertWarRoomPanel({ video, channel, channelMedian, rece
                   boxShadow:isActive?`0 0 28px ${expert.glow}`:"none",
                 }}>
                   {isActive&&<div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,${expert.color},transparent)`,animation:"cosmicShimmer 1.5s linear infinite",backgroundSize:"200% 100%"}} />}
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:`${expert.color}08`,borderBottom:`1px solid ${expert.color}18`}}>
-                    <div style={{width:30,height:30,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:`${expert.color}18`,border:`1px solid ${expert.color}35`,fontSize:13,color:expert.color,boxShadow:isActive?`0 0 14px ${expert.color}70`:`0 0 6px ${expert.color}25`,transition:"box-shadow 0.3s"}}>{expert.icon}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:`linear-gradient(135deg, ${expert.color}10, ${expert.color}04)`,borderBottom:`1px solid ${expert.color}22`,position:"relative"}}>
+                    {/* Corner circuit decoration */}
+                    <div style={{position:"absolute",top:6,right:6,width:20,height:20,opacity:0.3}}>
+                      <div style={{position:"absolute",top:0,right:0,width:8,height:1,background:expert.color}} />
+                      <div style={{position:"absolute",top:0,right:0,width:1,height:8,background:expert.color}} />
+                      <div style={{position:"absolute",bottom:0,left:0,width:8,height:1,background:expert.color}} />
+                      <div style={{position:"absolute",bottom:0,left:0,width:1,height:8,background:expert.color}} />
+                    </div>
+                    <div style={{
+                      width:36,height:36,borderRadius:10,flexShrink:0,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      background:`linear-gradient(135deg, ${expert.color}22, ${expert.color}08)`,
+                      border:`1px solid ${expert.color}40`,fontSize:15,color:expert.color,
+                      boxShadow:isActive?`0 0 20px ${expert.color}80, inset 0 1px 0 rgba(255,255,255,0.15)`:`0 0 8px ${expert.color}30, inset 0 1px 0 rgba(255,255,255,0.08)`,
+                      transition:"box-shadow 0.3s",
+                    }}>{expert.icon}</div>
                     <div className="flex-1 min-w-0">
-                      <div style={{fontSize:12,fontWeight:600,color:"#E8E6E1"}}>{expert.name}</div>
-                      <div className="font-mono" style={{fontSize:8,color:"#5E5A57",letterSpacing:"0.06em"}}>{expert.role}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#E8E6E1",letterSpacing:"-0.01em"}}>{expert.name}</div>
+                      <div className="font-mono" style={{fontSize:8,color:expert.color,opacity:0.7,letterSpacing:"0.1em"}}>{expert.role.toUpperCase()}</div>
                     </div>
                     {op?.loading&&!op?.done&&<ThinkingDots color={expert.color} />}
-                    {op?.done&&!op?.error&&<div style={{width:8,height:8,borderRadius:"50%",background:expert.color,boxShadow:`0 0 8px ${expert.color}`}} />}
+                    {op?.done&&!op?.error&&<CircuitNode color={expert.color} size={7} />}
                   </div>
                   <div style={{padding:"5px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
                     <span className="font-mono" style={{fontSize:8,color:"#5E5A57",fontStyle:"italic"}}>"{expert.stance}"</span>

@@ -468,7 +468,7 @@ export default function ReferenceSearch({ entries, onRemove, onBlockCreator }: R
                   </span>
 
                   {/* Title + channel */}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0" style={{ overflow: "hidden", minWidth: 0 }}>
                     <a
                       href={entry.type === "channel" ? `https://www.youtube.com/channel/${entry.id}` : `https://www.youtube.com/watch?v=${entry.id}`}
                       target="_blank"
@@ -478,11 +478,11 @@ export default function ReferenceSearch({ entries, onRemove, onBlockCreator }: R
                     >
                       {entry.name}
                     </a>
-                    <div className="text-[7px] text-muted font-mono truncate">
+                    <div className="text-[7px] text-muted font-mono" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
                       {entry.channelName}
                       {entry.tags && entry.tags.length > 0 && (
                         <span className="ml-1 opacity-50">
-                          {entry.tags.slice(0, 3).map((t) => `#${t}`).join(" ")}
+                          {entry.tags.slice(0, 2).map((t) => `#${t.slice(0,12)}`).join(" ")}
                         </span>
                       )}
                     </div>
