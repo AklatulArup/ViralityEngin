@@ -9,7 +9,7 @@ const PERSONA_SYSTEMS: Record<string, string> = {
   default:      "You are a content intelligence analyst. Write 2 concise paragraphs. Be specific with numbers. No bullet points.",
 };
 
-function trimPrompt(p: string, max = 2500) {
+function trim(p: string, max = 2500) {
   return p.length <= max ? p : p.slice(0, max) + "\n\n[context trimmed]";
 }
 
@@ -19,48 +19,77 @@ export async function POST(req: NextRequest) {
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   if (!body.prompt) return NextResponse.json({ error: "prompt required" }, { status: 400 });
 
-  // Try every possible key name you might have set in Vercel
-  const apiKey =
+  const system  = PERSONA_SYSTEMS[body.persona ?? "default"] ?? PERSONA_SYSTEMS.default;
+  const prompt  = trim(body.prompt);
+  const errors: string[] = [];
+
+  // ── 1. Gemini (primary) ────────────────────────────────────────────────────
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    for (const model of ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]) {
+      try {
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              system_instruction: { parts: [{ text: system }] },
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: { maxOutputTokens: 400, temperature: 0.7 },
+            }),
+          }
+        );
+        const d = await r.json();
+        // Skip on quota or model-not-found errors, break on others
+        if (!r.ok) {
+          const msg = d.error?.message ?? `HTTP ${r.status}`;
+          errors.push(`Gemini/${model}: ${msg.slice(0, 100)}`);
+          if (r.status === 429 || msg.includes("quota") || msg.includes("not found")) continue;
+          break;
+        }
+        const text = d.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+        if (text.length > 10) return NextResponse.json({ text, source: model });
+      } catch (e) { errors.push(`Gemini/${model}: ${e}`); }
+    }
+  } else {
+    errors.push("Gemini: GEMINI_API_KEY not set");
+  }
+
+  // ── 2. Anthropic (fallback) ────────────────────────────────────────────────
+  const anthropicKey =
     process.env.Claude_AI_Summary_API_KEY ||
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.CLAUDE_API_KEY ||
-    process.env.claude_api_key;
-
-  if (!apiKey) {
-    return NextResponse.json({
-      error: "No API key found. Add Claude_AI_Summary_API_KEY to Vercel environment variables.",
-    }, { status: 503 });
+    process.env.ANTHROPIC_API_KEY;
+  if (anthropicKey) {
+    for (const model of ["claude-3-haiku-20240307", "claude-haiku-4-5-20251001"]) {
+      try {
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": anthropicKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 400,
+            system,
+            messages: [{ role: "user", content: prompt }],
+          }),
+        });
+        const d = await r.json();
+        if (!r.ok) { errors.push(`Anthropic/${model}: ${d.error?.message}`); continue; }
+        const text = d.content?.find((b: {type:string}) => b.type === "text")?.text ?? "";
+        if (text.length > 10) return NextResponse.json({ text, source: model });
+      } catch (e) { errors.push(`Anthropic/${model}: ${e}`); }
+    }
+  } else {
+    errors.push("Anthropic: no key set (add Claude_AI_Summary_API_KEY to Vercel)");
   }
 
-  const systemPrompt = PERSONA_SYSTEMS[body.persona ?? "default"] ?? PERSONA_SYSTEMS.default;
-
-  // Try current model names in order
-  for (const model of [
-    "claude-haiku-4-5-20251001",
-    "claude-3-5-haiku-20241022",
-    "claude-3-haiku-20240307",
-  ]) {
-    try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 400,
-          system: systemPrompt,
-          messages: [{ role: "user", content: trimPrompt(body.prompt) }],
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok) { console.error(`${model}:`, d.error?.message, d.error?.type); continue; }
-      const text = d.content?.find((b: {type:string}) => b.type === "text")?.text ?? "";
-      if (text.length > 10) return NextResponse.json({ text, source: model });
-    } catch (e) { console.error(`${model} exception:`, e); }
-  }
-
-  return NextResponse.json({ error: "Anthropic API call failed. Check Vercel function logs for details." }, { status: 503 });
+  return NextResponse.json({
+    error: "All AI providers failed",
+    details: errors,
+    fix: "Gemini quota may be exhausted (resets daily). Add Claude_AI_Summary_API_KEY to Vercel as backup.",
+  }, { status: 503 });
 }
