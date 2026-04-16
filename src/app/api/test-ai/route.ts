@@ -1,26 +1,39 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not set in Vercel environment variables" });
+  const apiKey =
+    process.env.Claude_AI_Summary_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.CLAUDE_API_KEY;
 
-  const results: Record<string, unknown> = { key: `✓ ${apiKey.slice(0,12)}...` };
+  if (!apiKey) return NextResponse.json({
+    error: "No key found",
+    checked: ["Claude_AI_Summary_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_API_KEY"],
+  });
 
-  for (const model of ["gemini-2.0-flash", "gemini-1.5-flash-latest"]) {
-    try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Say: OK" }] }] }),
-        }
-      );
-      const d = await r.json();
-      results[model] = { ok: r.ok, response: d.candidates?.[0]?.content?.parts?.[0]?.text ?? null, error: d.error?.message ?? null };
-      if (r.ok) break;
-    } catch (e) { results[model] = { error: String(e) }; }
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-3-haiku-20240307",
+        max_tokens: 20,
+        messages: [{ role: "user", content: "Say: OK" }],
+      }),
+    });
+    const d = await r.json();
+    return NextResponse.json({
+      key_prefix: apiKey.slice(0, 15) + "...",
+      status: r.status,
+      ok: r.ok,
+      response: d.content?.[0]?.text ?? null,
+      error: d.error ?? null,
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) });
   }
-
-  return NextResponse.json(results, { headers: { "Cache-Control": "no-store" } });
 }
