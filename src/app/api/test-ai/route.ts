@@ -22,7 +22,7 @@ export async function GET() {
           "HTTP-Referer": "https://virality-engin.vercel.app",
         },
         body: JSON.stringify({
-          model: "meta-llama/llama-3.1-8b-instruct:free",
+          model: "meta-llama/llama-3.2-3b-instruct:free",
           max_tokens: 20,
           messages: [{ role: "user", content: "Say: OK" }],
         }),

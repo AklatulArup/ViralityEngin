@@ -36,9 +36,12 @@ export async function POST(req: NextRequest) {
   // ── OpenRouter ──────────────────────────────────────────────────────────────
   if (openRouterKey) {
     for (const model of [
-      "meta-llama/llama-3.1-8b-instruct:free",
-      "google/gemma-2-9b-it:free",
-      "mistralai/mistral-7b-instruct:free",
+      "meta-llama/llama-3.2-3b-instruct:free",
+      "meta-llama/llama-3.1-70b-instruct:free",
+      "google/gemma-3-1b-it:free",
+      "mistralai/mistral-small-3.1-24b-instruct:free",
+      "deepseek/deepseek-r1-zero:free",
+      "qwen/qwen-2.5-7b-instruct:free",
     ]) {
       try {
         const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
