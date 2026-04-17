@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { forecast, projectAtDate, type ManualInputs, type Platform, type DataSource, type DateProjection } from "@/lib/forecast";
+import { INPUT_TOOLTIPS, type InputTooltip } from "@/lib/input-tooltips";
+import { recordForecast } from "@/lib/forecast-learning";
 import type { EnrichedVideo, VideoData } from "@/lib/types";
 import { formatNumber } from "@/lib/formatters";
 
@@ -20,6 +22,26 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
     () => forecast({ video, creatorHistory, platform, manualInputs }),
     [video, creatorHistory, platform, manualInputs],
   );
+
+  // Persist snapshot for later calibration — debounced: only once per video + inputs combo
+  useEffect(() => {
+    if (result.confidence.level === "insufficient") return;
+    const manualKeys = Object.entries(manualInputs)
+      .filter(([, v]) => v != null)
+      .map(([k]) => k);
+    recordForecast({
+      videoId:        video.id,
+      videoUrl:       (video as { url?: string }).url,
+      platform,
+      creatorHandle:  video.channel,
+      publishedAt:    video.publishedAt,
+      ageDaysAt:      video.publishedAt ? (Date.now() - new Date(video.publishedAt).getTime()) / 86_400_000 : 0,
+      viewsAt:        video.views,
+      forecast:       result,
+      manualInputsProvided: manualKeys,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video.id, JSON.stringify(manualInputs)]);
 
   // Target date for custom projection — defaults to 30 days from publish (or from today if pre-publish)
   const defaultTargetDate = useMemo(() => {
@@ -438,48 +460,111 @@ function ManualInputsForm({ platform, update }: { platform: Platform; update: (k
     <>
       {platform === "tiktok" && (
         <>
-          <InputRow label="Completion %"   hint="Creator Studio → Analytics → Content"      onChange={(v) => update("ttCompletionPct", v)} suffix="%" />
-          <InputRow label="Rewatch %"      hint="Creator Studio → Analytics"                 onChange={(v) => update("ttRewatchPct", v)} suffix="%" />
-          <InputRow label="FYP traffic %"  hint="Creator Studio → Traffic Source"           onChange={(v) => update("ttFypViewPct", v)} suffix="%" />
+          <InputRow fieldKey="ttCompletionPct" label="Completion %"  onChange={(v) => update("ttCompletionPct", v)} suffix="%" />
+          <InputRow fieldKey="ttRewatchPct"    label="Rewatch %"     onChange={(v) => update("ttRewatchPct", v)}    suffix="%" />
+          <InputRow fieldKey="ttFypViewPct"    label="FYP traffic %" onChange={(v) => update("ttFypViewPct", v)}    suffix="%" />
         </>
       )}
       {platform === "instagram" && (
         <>
-          <InputRow label="Saves"          hint="Insights → Post"                            onChange={(v) => update("igSaves", v)} />
-          <InputRow label="DM sends"       hint="Insights — Mosseri's #1 signal"            onChange={(v) => update("igSends", v)} />
-          <InputRow label="Reach"          hint="Insights → unique accounts reached"         onChange={(v) => update("igReach", v)} />
-          <InputRow label="3-sec hold %"   hint="Insights (if available)"                    onChange={(v) => update("igHold3s", v)} suffix="%" />
+          <InputRow fieldKey="igSaves"    label="Saves"         onChange={(v) => update("igSaves", v)} />
+          <InputRow fieldKey="igSends"    label="DM sends"      onChange={(v) => update("igSends", v)} />
+          <InputRow fieldKey="igReach"    label="Reach"         onChange={(v) => update("igReach", v)} />
+          <InputRow fieldKey="igHold3s"   label="3-sec hold %"  onChange={(v) => update("igHold3s", v)} suffix="%" />
         </>
       )}
       {(platform === "youtube" || platform === "youtube_short") && (
         <>
-          <InputRow label="AVD %"          hint="Studio → Analytics → Avg View Duration"    onChange={(v) => update("ytAVDpct", v)} suffix="%" />
-          <InputRow label="CTR %"          hint="Studio → Analytics → Impressions → CTR"    onChange={(v) => update("ytCTRpct", v)} suffix="%" />
-          <InputRow label="Impressions"    hint="Studio → Reach → Impressions"               onChange={(v) => update("ytImpressions", v)} />
+          <InputRow fieldKey="ytAVDpct"       label="AVD %"        onChange={(v) => update("ytAVDpct", v)}       suffix="%" />
+          <InputRow fieldKey="ytCTRpct"       label="CTR %"        onChange={(v) => update("ytCTRpct", v)}       suffix="%" />
+          <InputRow fieldKey="ytImpressions"  label="Impressions"  onChange={(v) => update("ytImpressions", v)} />
         </>
       )}
       {platform === "x" && (
         <>
-          <InputRow label="TweepCred"              hint="Visible to Premium users" onChange={(v) => update("xTweepCred", v)} />
-          <InputRow label="Replies engaged back"   hint="Count of replies author responded to (unlocks +75 weight)" onChange={(v) => update("xReplyByAuthor", v)} />
+          <InputRow fieldKey="xTweepCred"     label="TweepCred"            onChange={(v) => update("xTweepCred", v)} />
+          <InputRow fieldKey="xReplyByAuthor" label="Replies engaged back" onChange={(v) => update("xReplyByAuthor", v)} />
         </>
       )}
-      <InputRow label="Override baseline"  hint="Force a specific median instead of computed" onChange={(v) => update("baselineMedianOverride", v)} />
+      <InputRow fieldKey="baselineMedianOverride" label="Override baseline" onChange={(v) => update("baselineMedianOverride", v)} />
     </>
   );
 }
 
-function InputRow({ label, hint, onChange, suffix }: { label: string; hint: string; onChange: (v: string) => void; suffix?: string }) {
+function InputRow({ fieldKey, label, onChange, suffix }: { fieldKey: string; label: string; onChange: (v: string) => void; suffix?: string }) {
+  const tooltip = INPUT_TOOLTIPS[fieldKey];
   return (
     <div style={{ padding: "5px 0" }}>
       <div className="flex items-center gap-3">
-        <label style={{ fontSize: 12, color: "#E8E6E1", minWidth: 160, flexShrink: 0 }}>{label}</label>
+        <div style={{ minWidth: 180, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+          <label style={{ fontSize: 12, color: "#E8E6E1" }}>{label}</label>
+          {tooltip && <TooltipIcon tooltip={tooltip} />}
+        </div>
         <div className="flex items-center gap-1 flex-1">
           <input type="number" step="any" placeholder="—" onChange={(e) => onChange(e.target.value)} style={inputStyle} />
           {suffix && <span style={{ fontSize: 11, color: "#6B6964" }}>{suffix}</span>}
         </div>
       </div>
-      <div style={{ fontSize: 10.5, color: "#6B6964", marginLeft: 172, marginTop: 2, lineHeight: 1.45 }}>{hint}</div>
+      {tooltip && (
+        <div style={{ fontSize: 10.5, color: "#6B6964", marginLeft: 192, marginTop: 2, lineHeight: 1.45 }}>
+          {tooltip.where.split("→")[0].trim()}{tooltip.where.includes("→") ? ` → …` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TooltipIcon({ tooltip }: { tooltip: InputTooltip }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      style={{ position: "relative", display: "inline-flex" }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onClick={() => setShow((s) => !s)}
+    >
+      <span
+        style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 15, height: 15, borderRadius: "50%",
+          border: "1px solid rgba(167,139,250,0.55)",
+          color: show ? "#E8E6E1" : "rgba(167,139,250,0.95)",
+          background: show ? "rgba(167,139,250,0.25)" : "transparent",
+          fontSize: 10, fontWeight: 600, cursor: "help", flexShrink: 0,
+          transition: "background 120ms, color 120ms",
+          fontFamily: "IBM Plex Mono, monospace",
+        }}
+      >
+        i
+      </span>
+      {show && (
+        <div
+          style={{
+            position: "absolute", left: 22, top: -6, zIndex: 1000,
+            width: 320, background: "rgba(16,15,13,0.98)",
+            border: "1px solid rgba(167,139,250,0.4)",
+            borderRadius: 8, padding: "12px 14px",
+            boxShadow: "0 6px 24px rgba(0,0,0,0.5)",
+            fontSize: 11.5, color: "#E8E6E1", lineHeight: 1.55,
+            pointerEvents: "none",
+          }}
+        >
+          <TooltipRow label="What"  content={tooltip.what}  color="#E8E6E1" />
+          <TooltipRow label="Where" content={tooltip.where} color="#A78BFA" mono />
+          <TooltipRow label="Good"  content={tooltip.good}  color="#2ECC8A" />
+          <TooltipRow label="Bad"   content={tooltip.bad}   color="#FF6B7A" />
+          <TooltipRow label="Why"   content={tooltip.why}   color="#A8A6A1" last />
+        </div>
+      )}
+    </span>
+  );
+}
+
+function TooltipRow({ label, content, color, mono, last }: { label: string; content: string; color: string; mono?: boolean; last?: boolean }) {
+  return (
+    <div style={{ marginBottom: last ? 0 : 8 }}>
+      <div style={{ fontSize: 9.5, color: "#6B6964", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 11, color, lineHeight: 1.5, fontFamily: mono ? "IBM Plex Mono, monospace" : "inherit" }}>{content}</div>
     </div>
   );
 }
