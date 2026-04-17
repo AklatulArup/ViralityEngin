@@ -229,6 +229,12 @@ export function recordOutcome(videoId: string, actualViews: number, ageDaysAtChe
 export function computeCalibration(platform?: Platform): CalibrationReport {
   const all = getBrowserStore();
   const filtered = platform ? all.filter(s => s.platform === platform) : all;
+  return computeCalibrationFrom(filtered, platform);
+}
+
+// Pure calibration math — server can call this directly with snapshots from KV.
+export function computeCalibrationFrom(snapshots: ForecastSnapshot[], platform?: Platform): CalibrationReport {
+  const filtered = platform ? snapshots.filter(s => s.platform === platform) : snapshots;
 
   // Keep only snapshots with outcomes
   const withOutcomes = filtered
