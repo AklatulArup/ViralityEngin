@@ -1,167 +1,320 @@
 import type { VideoData, VRSCriterion } from "./types";
 
-// Instagram Reels IRS: 20 criteria, 100 points
-// Formula: (DM_sends*0.40) + (Saves*0.30) + (3s_hold+Watch*0.30)
-// Sources: Mosseri Jan 2025, Feb 2026. Platform research 2024-2026.
-// NOTE: All checks use only VideoData fields (views, likes, comments, shares, saves, durationSeconds)
-// Engagement proxy: (likes + comments) / views * 100
+// Instagram Reels Readiness Score (IRS) — 2026 edition
+// 20 criteria, 100 points total.
+//
+// Sources: Adam Mosseri official updates (Jan 2025, Sept 2025, Feb 2026),
+// creators.instagram.com, Hootsuite 2026 Instagram Algorithm Guide,
+// Later 2025 Benchmarks, Social Insider 2025 Analysis.
+//
+// THREE CONFIRMED RANKING SIGNALS (Mosseri, January 2025):
+//   1. Watch Time — most important for both connected and unconnected reach
+//   2. Sends per Reach — 3-5x more valuable than likes for reaching non-followers
+//   3. Likes per Reach — still matters, weighted more for connected reach (existing followers)
+//
+// 2026 structural changes folded in:
+//  • Originality Score: accounts posting 10+ reposts in 30 days are excluded from recommendations entirely.
+//  • Watermarks from TikTok/CapCut/YT = immediate recommendation disqualification.
+//  • Reels can be up to 3 minutes and now reach non-followers through recommendations.
+//  • "Your Algorithm" (Dec 2025): users can add/remove topics from their own Reel recommendations.
+//  • Trial Reels: test content with non-followers before exposing to existing audience.
+//  • Keyword-rich captions outperform hashtag-heavy posts for discovery (~30% more reach).
+//  • Hashtags: 3-5 specific is enough. Stuffed posts are filtered.
+//  • Audition system: first shown to small non-follower test group. Fail = throttled before followers see it.
+//  • Bottom nav update (Sept 2025): Reels + DMs are now primary surfaces.
 
-function engProxy(d: VideoData): number {
-  return ((d.likes + d.comments) / Math.max(1, d.views)) * 100;
-}
-function shareRate(d: VideoData): number {
-  return ((d.shares ?? 0) / Math.max(1, d.views)) * 100;
-}
-function saveRate(d: VideoData): number {
-  return ((d.saves ?? 0) / Math.max(1, d.views)) * 100;
-}
-function commentRate(d: VideoData): number {
-  return (d.comments / Math.max(1, d.views)) * 100;
-}
-function likeRate(d: VideoData): number {
-  return (d.likes / Math.max(1, d.views)) * 100;
+function getIG(d: VideoData) {
+  return {
+    shares:    d.shares ?? 0,  // DM sends (primary signal)
+    saves:     d.saves ?? 0,
+    tags:      d.tags || [],
+    followers: (d as { creatorFollowers?: number }).creatorFollowers ?? 0,
+    description: d.description || "",
+  };
 }
 
 export const IG_CRITERIA: VRSCriterion[] = [
 
-  // TIER 1: Critical (50 pts)
+  // ─── TIER 1: The Three Confirmed Signals (55 points) ─────────────────────
 
-  { id:"ig-dm-send", label:"DM Send Rate  (#1 non-follower signal, ~40% weight)",
-    weight:15, tier:1, autoAssessable:true,
-    check:(d:VideoData) => {
-      const sr = shareRate(d), eng = engProxy(d);
-      return (sr >= 1.0 || eng >= 6) ? 1 : (sr >= 0.3 || eng >= 3) ? 0.5 : 0;
-    },
-    rationale:(d:VideoData, score:number|null) => {
-      const sr = shareRate(d).toFixed(3), eng = engProxy(d).toFixed(1);
-      if (score === 1)  return `Share rate ${sr}% + ${eng}% eng proxy -> strong DM send signal. Mosseri (Jan 2025, Feb 2026): DM sends = #1 signal for non-follower reach (~40% weight). 694K Reels sent via DM every minute on Instagram.`;
-      if (score === 0.5) return `Share rate ${sr}% -> moderate. CTA fix: "Send this to whoever is starting a challenge" - naming the specific recipient triples the forward rate vs generic "share this."`;
-      return `Share rate ${sr}% -> weak. DM sends carry ~40% of non-follower distribution weight. Content needs a forward-worthy hook. Key test: would someone personally hand this to a specific named person?`;
-    }},
-
-  { id:"ig-save-rate", label:"Save Rate  (3x weight of Like, ~30% weight)",
-    weight:13, tier:1, autoAssessable:true,
-    check:(d:VideoData) => {
-      const sv = saveRate(d);
-      if (sv >= 2) return 1;
-      if (sv >= 0.5) return 0.5;
-      return commentRate(d) >= 0.5 ? 0.5 : 0;
-    },
-    rationale:(d:VideoData, score:number|null) => {
-      const sv = saveRate(d).toFixed(3);
-      if (score === 1)  return `Save rate ${sv}% -> excellent. Saves are 3x the algorithmic weight of a like. High-save Reels get 2-4 weeks extended shelf life via "Suggested for you" placement.`;
-      if (score === 0.5) return `Save rate ${sv}% -> moderate. Embed a rule, number, or formula too dense to memorise. CTA: "Save this before your next challenge."`;
-      return `Save rate ~0% -> missing a critical signal. Include specific reference information (rule, number, formula) that viewers will want to return to.`;
-    }},
-
-  { id:"ig-3sec-hold", label:"3-Second Hold Rate  (<40% = 5-10x less reach)",
-    weight:12, tier:1, autoAssessable:true,
-    check:(d:VideoData) => {
-      const eng = engProxy(d), lr = likeRate(d);
-      // High like rate + high comment rate = strong hold proxy (people stayed to engage)
-      if (eng >= 5 && lr >= 3) return 1;
-      if (eng >= 2 && lr >= 1) return 0.5;
-      return 0;
-    },
-    rationale:(d:VideoData, score:number|null) => {
-      const eng = engProxy(d).toFixed(1), lr = likeRate(d).toFixed(2);
-      if (score === 1)  return `Eng proxy ${eng}% + like rate ${lr}% -> strong 3-sec hold signal. Kill threshold: <40% hold = 5-10x less reach. IG tests non-followers first - hook must land before caption overlay at ~1.5s.`;
-      if (score === 0.5) return `Eng proxy ${eng}% -> moderate hook signal. Use Trial Reels to measure 3-sec hold on non-followers before main feed commit. Test 3 different hooks.`;
-      return `Eng proxy ${eng}% -> weak hook. #1 cause of IG distribution failure. Visual hook must create pattern interrupt in under 1.5s. Use Trial Reels - it shows hold rate from non-followers specifically.`;
-    }},
-
-  { id:"ig-watch-time", label:"Completion  (>=50% for Explore eligibility)",
-    weight:10, tier:1, autoAssessable:true,
-    check:(d:VideoData) => {
-      const eng = engProxy(d), dur = d.durationSeconds;
-      const opt = (dur >= 7 && dur <= 15) || (dur >= 30 && dur <= 90);
-      if (eng >= 5 && opt) return 1;
-      if (eng >= 2 && dur >= 7) return 0.5;
-      return 0;
-    },
-    rationale:(d:VideoData, score:number|null) => {
+  {
+    id: "ig-watch-time",
+    label: "Watch time  (Mosseri: most important signal)",
+    weight: 18,
+    tier: 1,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { followers } = getIG(d);
+      if (d.views === 0 || d.durationSeconds === 0) return null;
+      const viewsPerFollower = followers > 0 ? d.views / followers : 1;
       const dur = d.durationSeconds;
-      const ds = dur < 60 ? `${dur}s` : `${Math.floor(dur/60)}m${dur%60}s`;
-      const eng = engProxy(d).toFixed(1);
-      if (score === 1)  return `${eng}% eng proxy + ${ds} optimal duration -> strong completion signal. >=50% completion required for Explore page eligibility. Two optimal modes: 7-15s (punchy) or 30-90s (educational/value).`;
-      if (score === 0.5) return `${eng}% eng, ${ds} -> moderate. Optimal lengths: 7-15s for visual impact; 30-90s for educational. Move payoff earlier.`;
-      return `${eng}% eng -> weak. Below 50% completion = not Explore eligible. Tighten edit or reduce duration to one of the two optimal length modes.`;
-    }},
-
-  // TIER 2: Strong (30 pts)
-
-  { id:"ig-no-watermark", label:"No Third-Party Watermark  (Zero tolerance)",
-    weight:10, tier:2, autoAssessable:false,
-    check:(_d:VideoData) => null,
-    rationale:() => "Cannot assess programmatically. Instagram pixel+audio fingerprints every upload. Any TikTok or CapCut watermark = automatic exclusion from recommendations permanently. Always export clean from editing software before uploading."},
-
-  { id:"ig-originality", label:"Originality Score  (<=10 reposts / 30 days)",
-    weight:8, tier:2, autoAssessable:false,
-    check:(_d:VideoData) => null,
-    rationale:() => "Cannot assess from metadata. Accounts that repost >=10 times in 30 days receive an account-level originality flag suppressing ALL content from the account. Recovery: 60-90 days. Hard rule: never exceed 10 reposts in any 30-day window."},
-
-  { id:"ig-dual-signal", label:"Dual-Signal CTA  (DM + Save in same line)",
-    weight:7, tier:2, autoAssessable:false,
-    check:(_d:VideoData) => null,
-    rationale:() => "Cannot assess. The IG distribution holy grail: one CTA that fires DM sends + saves simultaneously. Example: 'Save this formula - and send it to whoever you are doing a challenge with.' Highest algorithmic yield of any single CTA on Instagram."},
-
-  { id:"ig-comment-quality", label:"Comment Depth  (Substantive replies)",
-    weight:5, tier:2, autoAssessable:true,
-    check:(d:VideoData) => {
-      const r = commentRate(d);
-      return r >= 0.5 ? 1 : r >= 0.2 ? 0.5 : 0;
+      // Sweet spot: short enough for high completion (15-30s) OR 60s+ with strong retention signal
+      const optimalShort = dur >= 15 && dur <= 30;
+      const optimalLong  = dur >= 60 && dur <= 180;
+      if (viewsPerFollower > 2.5 && (optimalShort || optimalLong)) return 1;
+      if (viewsPerFollower > 1 && dur <= 90) return 0.5;
+      return 0;
     },
-    rationale:(d:VideoData, score:number|null) => {
-      const r = commentRate(d).toFixed(3);
-      if (score === 1)  return `Comment rate ${r}% -> strong. Meta MSI scores comments >=5 words at 10x an emoji reaction. Substantive replies improve distribution to similar interest audiences.`;
-      if (score === 0.5) return `Comment rate ${r}% -> moderate. Ask: "What rule trips you up most in your challenge?" Specific questions produce longer, more algorithmically valuable replies.`;
-      return `Comment rate ${r}% -> weak. Add a genuine topic-specific question requiring a real answer - not "What do you think?" but something specific to the video content.`;
-    }},
-
-  // TIER 3: Supporting (15 pts)
-
-  { id:"ig-aspect-ratio", label:"Vertical Format  (9:16 optimal, 4:5 acceptable)",
-    weight:5, tier:3, autoAssessable:false,
-    check:(_d:VideoData) => null,
-    rationale:() => "Cannot assess from metadata. 9:16 optimal. 4:5 acceptable. 16:9 horizontal = ~30% less reach in the Reels feed."},
-
-  { id:"ig-hook-timing", label:"Visual Hook Before Caption Overlay  (< 1.5 seconds)",
-    weight:5, tier:3, autoAssessable:false,
-    check:(_d:VideoData) => null,
-    rationale:() => "Cannot assess from metadata. Instagram caption overlay appears at ~1.5s. Visual hook must create a reason to stay before the caption appears. First 1.5s must be entirely visual - striking image, number, or action."},
-
-  { id:"ig-trial-reels", label:"Trial Reels Testing  (A/B hook on non-followers first)",
-    weight:5, tier:3, autoAssessable:false,
-    check:(_d:VideoData) => null,
-    rationale:() => "Cannot assess from metadata. Trial Reels shows 3-sec hold rate from non-followers before main feed commit. If below 50%, rebuild the hook. Single most underused RM tool on Instagram in 2026."},
-
-  // TIER 4: Baseline (5 pts)
-
-  { id:"ig-hashtags", label:"Hashtag Strategy  (5-10 mixed tiers)",
-    weight:3, tier:4, autoAssessable:true,
-    check:(d:VideoData) => {
-      const t = d.tags?.length ?? 0;
-      return (t >= 5 && t <= 10) ? 1 : (t >= 3 && t <= 15) ? 0.5 : t > 0 ? 0.25 : 0;
+    rationale: (d: VideoData, score: number | null) => {
+      const { followers } = getIG(d);
+      const vpf = followers > 0 ? (d.views / followers).toFixed(1) : "N/A";
+      const dur = d.durationSeconds;
+      if (score === null) return "Insufficient data.";
+      if (score === 1)
+        return `${vpf}x reach vs follower count, ${dur}s duration. Watch time is Instagram's #1 ranking signal across all surfaces (Mosseri, January 2025). Strong signal that viewers watched to completion or rewatched — the core trigger for Reels distribution to non-followers.`;
+      if (score === 0.5)
+        return `${vpf}x reach, ${dur}s. Moderate. Up to 50% of viewers drop off in the first 3 seconds. A Reel with strong 3-second hold (60%+) outperforms weak ones by 5-10x in total reach. A 15s Reel watched to completion twice beats a 60s Reel where 80% drop off at second 5.`;
+      return `${vpf}x reach, ${dur}s. Weak watch time signal. Cut to 15-30s, or restructure so the value delivery happens before the 3-second drop-off cliff.`;
     },
-    rationale:(d:VideoData, score:number|null) => {
-      const t = d.tags?.length ?? 0;
-      if (score === 1)  return `${t} hashtags -> optimal. Mix: 1-2 niche (#proptrading) + 2-3 mid (#forextrading) + 1-2 broad (#investing). Reels use hashtags for classification, not primary discovery.`;
-      if (score === 0.5) return `${t} hashtags -> acceptable. Aim for 5-10 mixed-tier hashtags for content classification.`;
-      return `${t === 0 ? "No" : t} hashtags -> add 3-5 for content classification and interest-matched distribution.`;
-    }},
-
-  { id:"ig-caption", label:"Caption  (Question or save trigger)",
-    weight:2, tier:4, autoAssessable:true,
-    check:(d:VideoData) => {
-      if (!d.title) return 0;
-      const hasQ = /\?/.test(d.title);
-      const hasSave = /save|bookmark|reference|keep/i.test(d.title);
-      return (hasQ || hasSave) ? 1 : d.title.length > 50 ? 0.5 : 0.25;
+  },
+  {
+    id: "ig-sends-per-reach",
+    label: "DM Sends per Reach  (3-5x a like — top growth signal)",
+    weight: 17,
+    tier: 1,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { shares } = getIG(d);
+      if (d.views === 0) return 0;
+      const sendRate = (shares / d.views) * 100;
+      if (sendRate >= 1)   return 1;
+      if (sendRate >= 0.3) return 0.5;
+      return 0;
     },
-    rationale:(d:VideoData) => {
-      const hasQ = /\?/.test(d.title ?? "");
-      const hasSave = /save|bookmark/i.test(d.title ?? "");
-      if (hasQ || hasSave) return `Caption includes a ${hasQ ? "question" : "save trigger"} - effective. Two effective patterns: specific answerable question, or save trigger with future-utility reason.`;
-      return `Caption lacks question or save trigger. Add one: (1) specific question requiring real answer, or (2) save trigger ("save this before your next challenge"). Generic CTAs are algorithmically ignored.`;
-    }},
+    rationale: (d: VideoData, score: number | null) => {
+      const { shares } = getIG(d);
+      const rate = d.views > 0 ? ((shares / d.views) * 100).toFixed(3) : "0";
+      if (score === 1)
+        return `Send rate ${rate}%, strong. DM sends are 3-5x more valuable than likes for reaching non-followers (Mosseri, January 2025). 694,000 Reels are sent via DM every minute (Metricool, 2025). This is the #1 growth signal on Instagram.`;
+      if (score === 0.5)
+        return `Send rate ${rate}%, moderate. Design for the "send this to someone who..." moment. Validation content (tribal identity), anxiety content (warning a specific person), and amusement (social bonding) drive DM sends. Generic content doesn't.`;
+      return `Send rate ${rate}%, weak. On Instagram, DM sends matter more than any other action for reaching new audiences. Build content that creates an impulse to forward to a specific person: relatable struggles, warning posts, inside-joke humour, tribal identity signals.`;
+    },
+  },
+  {
+    id: "ig-likes-per-reach",
+    label: "Likes per Reach  (connected reach signal)",
+    weight: 10,
+    tier: 1,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      if (d.views === 0) return 0;
+      const likeRate = (d.likes / d.views) * 100;
+      // Instagram measures likes as a ratio, not raw count
+      if (likeRate >= 5)   return 1;
+      if (likeRate >= 2)   return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const rate = d.views > 0 ? ((d.likes / d.views) * 100).toFixed(2) : "0";
+      if (score === 1)
+        return `Like rate ${rate}%, strong. Instagram measures likes per reach, not raw likes. A post with 50 likes from 500 reach (10% like rate) outranks one with 200 likes from 10,000 reach (2%). This signal matters most for connected reach: keeping your existing followers engaged.`;
+      if (score === 0.5)
+        return `Like rate ${rate}%, moderate. Likes matter more for reaching your existing followers than for unconnected reach. Prioritise sends and watch time for growth; likes are a secondary health signal.`;
+      return `Like rate ${rate}%, weak. Low like rate suggests the content isn't resonating with your existing followers, which hurts connected reach. Check if you've drifted from your niche.`;
+    },
+  },
+  {
+    id: "ig-save-rate",
+    label: "Save rate  (reference value signal)",
+    weight: 10,
+    tier: 1,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { saves } = getIG(d);
+      if (d.views === 0) return 0;
+      const rate = (saves / d.views) * 100;
+      if (rate >= 1)    return 1;
+      if (rate >= 0.3)  return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const { saves } = getIG(d);
+      const rate = d.views > 0 ? ((saves / d.views) * 100).toFixed(3) : "0";
+      if (score === 1)
+        return `Save rate ${rate}%, strong. A save tells Instagram the content is worth returning to. Educational, reference, and practical posts earn saves. Saves carry far more weight than likes in the ranking formula.`;
+      if (score === 0.5)
+        return `Save rate ${rate}%, moderate. Add a specific checklist, a comparison table, or a concrete rule that viewers want to keep. Reference utility drives saves.`;
+      return `Save rate ${rate}%, weak. Entertainment without utility gets watched and forgotten. Add one piece of specific, practical information per Reel that viewers will want to return to.`;
+    },
+  },
+
+  // ─── TIER 2: Strong signals (25 points) ──────────────────────────────────
+
+  {
+    id: "ig-originality",
+    label: "Originality  (no watermarks, not a repost)",
+    weight: 7,
+    tier: 2,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { description } = getIG(d);
+      const t = description.toLowerCase();
+      const repostMarkers = /repost|via @|credit:|cr:|original:|reposted/.test(t);
+      // Check for cross-platform watermark text (TikTok, CapCut usernames, etc.)
+      const hasCrossPlatformText = /tiktok|capcut|youtube/.test(t);
+      if (repostMarkers || hasCrossPlatformText) return 0;
+      return 1;
+    },
+    rationale: (_d: VideoData, score: number | null) => {
+      if (score === 1)
+        return `No repost markers or cross-platform indicators detected. Instagram 2026 actively penalises reposted content. Accounts posting 10+ reposts in 30 days are excluded from Explore and Reels recommendations entirely (Net Influencer data). Original Reels see 40-60% more distribution than reposts.`;
+      return `Repost or cross-platform watermark detected. Instagram's 2026 Originality Score catches these. A TikTok watermark or "reposted from @" caption is enough to disqualify the post from recommendations. Reshoot or re-edit natively before posting.`;
+    },
+  },
+  {
+    id: "ig-comment-quality",
+    label: "Comment depth  (substantive > emoji)",
+    weight: 6,
+    tier: 2,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      if (d.views === 0) return 0;
+      const rate = (d.comments / d.views) * 100;
+      if (rate >= 1)    return 1;
+      if (rate >= 0.3)  return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const rate = d.views > 0 ? ((d.comments / d.views) * 100).toFixed(3) : "0";
+      if (score === 1)
+        return `Comment rate ${rate}%, strong. Instagram 2026 weights conversation depth over raw count. Thread conversations and detailed reactions signal real engagement. Short filler comments carry minimal weight.`;
+      if (score === 0.5)
+        return `Comment rate ${rate}%, moderate. Reply substantively to the first 5-10 comments within the first hour. Two-way conversation compounds the signal.`;
+      return `Comment rate ${rate}%, weak. Low comment engagement limits connected reach. Ask a specific question in the caption — not "what do you think?" but a forced-choice question that invites a specific answer.`;
+    },
+  },
+  {
+    id: "ig-hook-3s",
+    label: "3-second hold  (audition phase gate)",
+    weight: 6,
+    tier: 2,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const text = (d.description || d.title || "").toLowerCase();
+      const hasNumber = /\d+|\$|%/.test(text.slice(0, 60));
+      const hasBoldClaim = /never|always|stop|only|truth|why|how|this|secret|actually|unpopular/.test(text.slice(0, 100));
+      const hasQuestion = /\?/.test(text.slice(0, 80));
+      if ((hasNumber || hasBoldClaim) && hasQuestion) return 1;
+      if (hasNumber || hasBoldClaim || hasQuestion) return 0.75;
+      return 0.25;
+    },
+    rationale: (d: VideoData, _score: number | null) => {
+      const first = (d.description || d.title || "").slice(0, 80);
+      return `First 80 chars: "${first}". Instagram 2026 uses an "audition system" (Mosseri): new Reels are first shown to a small non-follower test group. If 3-second hold fails there, the Reel gets throttled BEFORE your own followers see it. The hook must appear in the first 1.5 seconds, before the caption overlay.`;
+    },
+  },
+  {
+    id: "ig-captions-keywords",
+    label: "Keyword-rich caption  (Instagram SEO)",
+    weight: 6,
+    tier: 2,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { description, tags } = getIG(d);
+      const len = description.length;
+      const hasKeywords = tags.length >= 3 && tags.length <= 5;
+      const hasKeywordCaption = len > 80 && len < 250;
+      if (hasKeywords && hasKeywordCaption) return 1;
+      if (hasKeywords || hasKeywordCaption) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const { description, tags } = getIG(d);
+      if (score === 1)
+        return `Caption is ${description.length} chars with ${tags.length} hashtags. Optimal. Instagram 2026: keyword-rich captions drive ~30% more reach than hashtag-heavy posts. Instagram Search reads caption language like page copy — write naturally but include the words your target viewer would search.`;
+      if (score === 0.5)
+        return `Partial SEO signal. Write a 100-200 character caption with the actual search terms your audience uses. Mosseri has explicitly listed captions as a Reels ranking factor.`;
+      return `Weak SEO signal. A generic or hashtag-only caption misses Instagram's search surface entirely. Include target keywords naturally in the first 125 chars (above the "more" fold).`;
+    },
+  },
+
+  // ─── TIER 3: Supporting (12 points) ──────────────────────────────────────
+
+  {
+    id: "ig-duration-fit",
+    label: "Duration fit  (15-30s OR 60-180s)",
+    weight: 4,
+    tier: 3,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const dur = d.durationSeconds;
+      // 2026: Reels up to 3 minutes get recommended to non-followers
+      if ((dur >= 15 && dur <= 30) || (dur >= 60 && dur <= 180)) return 1;
+      if (dur >= 10 && dur <= 60) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const dur = d.durationSeconds;
+      if (score === 1)
+        return `${dur}s duration. Fits 2026 optimal band. 15-30s = highest completion rate; 60-180s = long-form Reel push (Instagram extended Reels to 3 min and now recommends longer ones to non-followers).`;
+      if (score === 0.5)
+        return `${dur}s, moderate fit. Instagram 2026 rewards either short-and-complete (15-30s) or long-and-held (60s+). 45-55s is the dead zone.`;
+      return `${dur}s, suboptimal. Cut to under 30s or extend to 60+ for better algorithmic fit.`;
+    },
+  },
+  {
+    id: "ig-hashtag-restraint",
+    label: "Hashtags — 3 to 5 specific",
+    weight: 4,
+    tier: 3,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { tags } = getIG(d);
+      if (tags.length >= 3 && tags.length <= 5) return 1;
+      if (tags.length >= 1 && tags.length <= 7) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const { tags } = getIG(d);
+      if (score === 1)
+        return `${tags.length} hashtags. Optimal. Instagram 2026 treats hashtags as topic signals for the AI classifier, not as discovery channels. 3-5 specific tags categorise the post correctly. More is not better; stuffed posts are filtered.`;
+      if (score === 0.5)
+        return `${tags.length} hashtags. Adjust to 3-5 niche-specific tags. Hashtags no longer support follows and their discovery impact has diminished since 2024. They're a supporting signal only.`;
+      return `No hashtags or too many. Use 3-5 targeted tags that match the topic of the post. Over-tagging triggers the spam classifier.`;
+    },
+  },
+  {
+    id: "ig-trial-reel",
+    label: "Trial Reels used for experimentation",
+    weight: 4,
+    tier: 3,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot assess from post-hoc data. Instagram 2026 offers Trial Reels: test experimental content with non-followers ONLY before exposing it to your existing audience. If it performs well with the test group, publish to followers. If it flops, it doesn't drag your account's engagement baseline. Use Trial Reels for any content that departs from your niche.",
+  },
+
+  // ─── TIER 4: Baseline (8 points) ─────────────────────────────────────────
+
+  {
+    id: "ig-engagement-velocity",
+    label: "First 30-60 min engagement velocity",
+    weight: 3,
+    tier: 4,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot assess from post-hoc data. Engagement accumulating in the first 30-60 minutes determines whether the Reel clears the audition phase and expands to broader non-follower pools. Reply to every DM/comment in the first hour. Post when your audience is most active (Instagram Insights → Most Active Times).",
+  },
+  {
+    id: "ig-eligibility-criteria",
+    label: "Recommendation eligibility  (no violations)",
+    weight: 3,
+    tier: 4,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Instagram 2026 baseline recommendation eligibility: no watermarks from other platforms (TikTok/CapCut logos), includes audio, under 3 minutes, original content. Violating any one disqualifies from Explore and Reels recommendations (content still visible to followers but not to new audiences). Check Account Status in Settings for any active flags.",
+  },
+  {
+    id: "ig-your-algorithm",
+    label: "\"Your Algorithm\" topic alignment",
+    weight: 2,
+    tier: 4,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot directly measure. Since December 2025, Instagram users can add/remove topics from their Reel recommendations via Settings → Content Preferences → Your Algorithm. Post within one consistent topic so your content matches the categories users have opted into. Topic drift reduces match rate with opted-in audiences.",
+  },
 ];

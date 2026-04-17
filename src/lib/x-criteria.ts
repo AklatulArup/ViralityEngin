@@ -1,182 +1,195 @@
 import type { VideoData, VRSCriterion } from "./types";
 
-// X (Twitter) Readiness Score (XRS): 20 criteria, 100 points total
-// Signal weights from X's open-sourced algorithm (github.com/twitter/the-algorithm, 2023)
-// Updated with 2026 changes: Grok AI ranking, link suppression intensified, Premium reach gap.
+// X (Twitter) Readiness Score (XRS) — 2026 edition
+// 20 criteria, 100 points total.
 //
-// Key confirmed weights (from source code):
-//   Reply that gets author reply back: +75 (150× a like)
-//   Quote tweet:                       +25 (50× a like)
-//   Reply:                             +13.5 (27× a like)
-//   Profile click → follow:            +12
-//   Bookmark:                          +10 (20× a like)
-//   Retweet:                           +1 (2× a like)
-//   Like:                              +0.5 (baseline)
-//   External link in main post:        −75 (NEGATIVE)
+// SOURCES (verified weights):
+//   • github.com/twitter/the-algorithm-ml (Heavy Ranker weights, April 5 2023 — still canonical reference)
+//   • github.com/xai-org/x-algorithm (January 2026 Grok/Phoenix release)
+//
+// CONFIRMED HEAVY RANKER WEIGHTS (from scored_tweets_model_weight_* config):
+//     favourite (like)           :  +0.5
+//     retweet                    :  +1.0
+//     reply                      : +13.5  (27x a like)
+//     reply_engaged_by_author    : +75.0  (150x a like)  ← highest positive weight
+//     good_profile_click         : +12.0  (click profile then like or reply)
+//     good_click (into convo)    : +11.0
+//     good_click_v2 (stay 2+ min):  +10.0
+//     video_playback50           :  +0.005
+//     negative_feedback_v2       : -74.0  (show less often, mute, block the author)
+//     report                     : -369.0
+//
+// 2026 CHANGES (xai-org/x-algorithm Jan 2026 release):
+//  • Grok-based Phoenix transformer replaces legacy Heavy Ranker MaskNet.
+//  • All hand-engineered features and heuristics eliminated.
+//  • Negative signals carry massive weights (block -3.0 in the summary scoring
+//    layer that sits on top of the transformer). Optimises for long-term retention, not rage-bait.
+//  • ~1,500 candidates blended 50/50 in-network vs out-of-network per feed refresh.
+//  • Author Diversity Penalty: algorithm limits posts from same account per session.
+//  • Premium boost: +4 to +16 TweepCred points.
+//  • TweepCred threshold: below 0.65, only 3 of your tweets considered for distribution.
+//  • 6-hour time decay — post visibility halves every 6 hours.
 
-// Helper — X posts come in as VideoData but with different fields
 function getX(d: VideoData) {
   return {
-    reposts:   (d as unknown as { reposts?: number }).reposts ?? (d.shares ?? 0),
-    quotes:    (d as unknown as { quotes?: number }).quotes   ?? 0,
-    bookmarks: (d as unknown as { bookmarks?: number }).bookmarks ?? (d.saves ?? 0),
-    replies:   d.comments,
-    likes:     d.likes,
-    views:     d.views,
-    hasLink:   (d as unknown as { hasLink?: boolean }).hasLink ?? false,
-    isThread:  (d as unknown as { isThread?: boolean }).isThread ?? false,
-    hasVideo:  (d as unknown as { hasVideo?: boolean }).hasVideo ?? false,
-    hasImage:  (d as unknown as { hasImage?: boolean }).hasImage ?? false,
+    reposts:    (d as unknown as { reposts?: number }).reposts    ?? (d.shares ?? 0),
+    quotes:     (d as unknown as { quotes?: number }).quotes      ?? 0,
+    bookmarks:  (d as unknown as { bookmarks?: number }).bookmarks ?? (d.saves ?? 0),
+    replies:    d.comments,
+    likes:      d.likes,
+    views:      d.views,
+    hasLink:    (d as unknown as { hasLink?: boolean }).hasLink   ?? false,
+    isThread:   (d as unknown as { isThread?: boolean }).isThread ?? false,
+    hasVideo:   (d as unknown as { hasVideo?: boolean }).hasVideo ?? false,
+    hasImage:   (d as unknown as { hasImage?: boolean }).hasImage ?? false,
+    verified:   (d as unknown as { authorVerified?: boolean }).authorVerified ?? false,
+    followers:  (d as unknown as { authorFollowers?: number }).authorFollowers ?? 0,
   };
 }
 
 export const X_CRITERIA: VRSCriterion[] = [
 
-  // ─── TIER 1: Critical (50 points) ────────────────────────────────────────────
+  // ─── TIER 1: Critical (50 points) ────────────────────────────────────────
 
   {
     id: "x-reply-depth",
-    label: "Reply depth  (27× a like in X algorithm)",
+    label: "Reply depth  (27x a like — Heavy Ranker weight 13.5)",
     weight: 18,
     tier: 1,
     autoAssessable: true,
     check: (d: VideoData) => {
       const { replies, views } = getX(d);
       if (views === 0) return 0;
-      const replyRate = (replies / views) * 100;
-      return replyRate >= 0.5 ? 1 : replyRate >= 0.15 ? 0.5 : 0;
+      const rate = (replies / views) * 100;
+      return rate >= 0.5 ? 1 : rate >= 0.15 ? 0.5 : 0;
     },
     rationale: (d: VideoData, score: number | null) => {
       const { replies, views } = getX(d);
       const rate = views > 0 ? ((replies / views) * 100).toFixed(3) : "0";
       if (score === 1)
-        return `Reply rate ${rate}% → strong. Replies score 27× a like in X's open-source algorithm. A reply that draws the author back (author replies to a reply) scores +75 — 150× a like. This content is generating conversation, which X actively amplifies.`;
+        return `Reply rate ${rate}%, strong. Replies score +13.5 in X's open-source Heavy Ranker — 27x a like. A reply that the author engages with back scores +75 (150x a like) — the single highest positive weight in the entire ranker.`;
       if (score === 0.5)
-        return `Reply rate ${rate}% → moderate. To increase: ask a specific, controversial, or unanswerable-in-one-word question in the post. Contrarian takes that invite correction generate the highest reply counts on X.`;
-      return `Reply rate ${rate}% → weak. Replies carry 27× the algorithmic weight of a like on X. Content that states a position rather than just shares information generates replies. Add a debatable claim or direct question.`;
+        return `Reply rate ${rate}%, moderate. Ask a specific, unanswerable-in-one-word question or post a contrarian claim that invites "well actually" responses. Reply to every reply in the first hour to unlock the +75 reply_engaged_by_author signal.`;
+      return `Reply rate ${rate}%, weak. Replies carry 27x the ranking weight of a like. Content that states a position (not just shares information) generates replies. Add a debatable claim or a direct question to the post.`;
     },
   },
   {
-    id: "x-quote-rate",
-    label: "Quote tweet rate  (50× a like)",
-    weight: 15,
+    id: "x-reply-engagement-signal",
+    label: "Author reply engagement  (150x a like — weight +75)",
+    weight: 10,
     tier: 1,
-    autoAssessable: true,
-    check: (d: VideoData) => {
-      const { quotes, views } = getX(d);
-      if (views === 0) return 0;
-      const qr = (quotes / views) * 100;
-      return qr >= 0.2 ? 1 : qr >= 0.05 ? 0.5 : 0;
-    },
-    rationale: (d: VideoData, score: number | null) => {
-      const { quotes, views } = getX(d);
-      const rate = views > 0 ? ((quotes / views) * 100).toFixed(4) : "0";
-      if (score === 1)
-        return `Quote rate ${rate}% → excellent. Quote tweets score 50× a like in X's algorithm — the second-highest action. This content is so compelling or controversial that people quote it with their own commentary. That commentary creates new distribution threads.`;
-      if (score === 0.5)
-        return `Quote rate ${rate}% → moderate. Quote-worthy content is typically: a data point that surprises people, a take they disagree with strongly enough to publicly respond, or a format they want to remix.`;
-      return `Quote rate ${rate}% → weak. Quote tweets score 50× a like. The highest-performing X content creates a "response frame" — people feel compelled to add their own take. Post takes that invite a "well actually" response.`;
-    },
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot directly measure from post metadata. A reply that the author engages with back scores +75 in X's Heavy Ranker — 150x a like and the single highest positive weight in the entire algorithm. Reply to EVERY reply in the first 30 minutes. One back-and-forth chain is worth more algorithmically than 150 likes. This is the most underused lever on X.",
   },
   {
     id: "x-bookmark-rate",
-    label: "Bookmark rate  (20× a like, utility signal)",
-    weight: 10,
+    label: "Bookmark rate  (utility signal)",
+    weight: 8,
     tier: 1,
     autoAssessable: true,
     check: (d: VideoData) => {
       const { bookmarks, views } = getX(d);
       if (views === 0) return 0;
-      const br = (bookmarks / views) * 100;
-      return br >= 0.5 ? 1 : br >= 0.1 ? 0.5 : 0;
+      const rate = (bookmarks / views) * 100;
+      return rate >= 0.5 ? 1 : rate >= 0.1 ? 0.5 : 0;
     },
     rationale: (d: VideoData, score: number | null) => {
       const { bookmarks, views } = getX(d);
       const rate = views > 0 ? ((bookmarks / views) * 100).toFixed(3) : "0";
       if (score === 1)
-        return `Bookmark rate ${rate}% → strong. Bookmarks score 20× a like and signal lasting utility — content people intend to return to. Threads, frameworks, and reference content earn the most bookmarks. This content has "save for later" value.`;
+        return `Bookmark rate ${rate}%, strong. Bookmarks signal lasting utility — content people intend to return to. Threads, frameworks, and reference content earn bookmarks. This content has "save for later" value.`;
       if (score === 0.5)
-        return `Bookmark rate ${rate}% → moderate. Add one high-utility element: a specific number, a checklist, a step-by-step framework, or a comparison table. Content that is too broad to memorise gets bookmarked.`;
-      return `Bookmark rate ${rate}% → weak. Bookmarks signal reference value and score 20× a like. Include one piece of specific, dense information that people will want to find again.`;
+        return `Bookmark rate ${rate}%, moderate. Add one high-utility element: a specific number, a checklist, a framework, a comparison. Content that's too broad to memorise gets bookmarked.`;
+      return `Bookmark rate ${rate}%, weak. Add one piece of specific, dense information per post that people want to find again.`;
     },
   },
   {
     id: "x-no-link-in-body",
-    label: "No external link in post body  (links score −75)",
-    weight: 7,
+    label: "No external link in post body  (external link = low weight)",
+    weight: 8,
     tier: 1,
     autoAssessable: true,
     check: (d: VideoData) => {
       const { hasLink } = getX(d);
-      // If hasLink is true AND engagement is still high, partial credit (link may be native media)
       if (!hasLink) return 1;
       const likeRate = d.likes / Math.max(1, d.views) * 100;
-      return likeRate >= 2 ? 0.5 : 0; // high engagement despite link = partial
+      return likeRate >= 2 ? 0.5 : 0;
     },
     rationale: (d: VideoData, score: number | null) => {
       const { hasLink } = getX(d);
       if (!hasLink || score === 1)
-        return `No external link detected in post body → optimal. X's algorithm applies a −75 score penalty (equivalent to removing 150 likes worth of value) for external links in the main post. Always put links in the first reply, not the post itself.`;
+        return `No external link in post body. Optimal. External link clicks carry low weight in X's ranking (good_click v2 is +10 for staying in the CONVERSATION, not for external clicks). X deliberately deprioritises content that pushes users off-platform. Always put links in the first reply, not the post.`;
       if (score === 0.5)
-        return `External link detected but engagement is still strong — suggests the link may be native X media. If this is an external URL (to an article, YouTube video, etc.): move it to the first reply immediately. The −75 penalty is real-time and suppresses distribution from the moment the post is published.`;
-      return `External link in post body → significant reach penalty. X's open-source algorithm applies −75 points for external links — equivalent to losing 150 likes worth of distribution. Delete and repost without the link, adding it as the first reply instead.`;
+        return `External link detected but engagement is still strong — may be native X media or a very compelling post. If this is an external URL, move it to the first reply. The post itself should be self-contained and keep users on-platform.`;
+      return `External link in post body. X's ranking system favours content that keeps users in the feed. Delete, repost without the link, then add the link as the first reply. This typically recovers significant reach.`;
     },
   },
-
-  // ─── TIER 2: Strong Signals (30 points) ──────────────────────────────────────
-
   {
-    id: "x-repost-rate",
-    label: "Repost rate  (2× a like)",
-    weight: 8,
-    tier: 2,
+    id: "x-retweet-rate",
+    label: "Retweet rate  (weight +1.0 — baseline amplifier)",
+    weight: 6,
+    tier: 1,
     autoAssessable: true,
     check: (d: VideoData) => {
       const { reposts, views } = getX(d);
       if (views === 0) return 0;
-      const rr = (reposts / views) * 100;
-      return rr >= 0.5 ? 1 : rr >= 0.15 ? 0.5 : 0;
+      const rate = (reposts / views) * 100;
+      return rate >= 0.5 ? 1 : rate >= 0.15 ? 0.5 : 0;
     },
     rationale: (d: VideoData, score: number | null) => {
       const { reposts, views } = getX(d);
       const rate = views > 0 ? ((reposts / views) * 100).toFixed(3) : "0";
       if (score === 1)
-        return `Repost rate ${rate}% → strong. While reposts only score 2× a like, volume reposts create secondary distribution waves across other follower graphs. They compound with reply and quote rates.`;
+        return `Retweet rate ${rate}%, strong. Retweets score +1.0 (2x a like) but compound through follower-graph cascades. Each retweet exposes the post to a new network.`;
       if (score === 0.5)
-        return `Repost rate ${rate}% → moderate. Add a repost-worthy frame: a single insight that stands alone without context, a surprising statistic, or a position statement that needs no explanation to be shared.`;
-      return `Repost rate ${rate}% → weak. Repostable content is typically a single standalone insight or take. If reading the post requires the surrounding thread to make sense, people don't repost.`;
+        return `Retweet rate ${rate}%, moderate. Add a retweet-worthy frame: a single standalone insight, a surprising statistic, or a position statement that needs no context to share.`;
+      return `Retweet rate ${rate}%, weak. Retweetable content is a single standalone insight. If reading the post requires the surrounding thread to make sense, people don't retweet.`;
     },
   },
+
+  // ─── TIER 2: Strong Signals (25 points) ──────────────────────────────────
+
   {
-    id: "x-first-hour",
+    id: "x-profile-click-signal",
+    label: "Profile click + engagement  (weight +12)",
+    weight: 6,
+    tier: 2,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot directly measure from post metadata. A user clicking through to your profile AND then liking or replying to another tweet scores +12 in the Heavy Ranker — 24x a like. This is the parasocial signal. Optimise bio + pinned post so that a profile click converts to a follow or a second engagement. Post 2-3 items a day that cross-reference each other so a profile visitor can see a pattern.",
+  },
+  {
+    id: "x-first-hour-velocity",
     label: "First-hour engagement velocity  (6-hour decay)",
-    weight: 8,
+    weight: 5,
     tier: 2,
     autoAssessable: true,
     check: (d: VideoData) => {
-      // X posts lose 50% of visibility score every 6 hours (time decay from open-source)
-      const ageMs  = d.publishedAt ? Date.now() - new Date(d.publishedAt).getTime() : 999 * 86400000;
-      const ageDays= ageMs / 86400000;
+      const ageMs   = d.publishedAt ? Date.now() - new Date(d.publishedAt).getTime() : 999 * 86400000;
+      const ageDays = ageMs / 86400000;
       const velocity = (d.likes + d.comments + (d.shares ?? 0)) / Math.max(1, d.views) * 100;
       if (velocity >= 2 && ageDays <= 1) return 1;
       if (velocity >= 1 || ageDays <= 1) return 0.5;
       return 0;
     },
     rationale: (d: VideoData, score: number | null) => {
-      const velocity = ((d.likes + d.comments + (d.shares ?? 0)) / Math.max(1, d.views) * 100).toFixed(2);
-      const ageMs   = d.publishedAt ? Date.now() - new Date(d.publishedAt).getTime() : 0;
+      const vel = ((d.likes + d.comments + (d.shares ?? 0)) / Math.max(1, d.views) * 100).toFixed(2);
+      const ageMs = d.publishedAt ? Date.now() - new Date(d.publishedAt).getTime() : 0;
       const ageDays = (ageMs / 86400000).toFixed(1);
       if (score === 1)
-        return `${velocity}% engagement rate, ${ageDays} days old → strong first-hour velocity. X's time decay function halves visibility score every 6 hours. A post that gets 80% of its total engagement in the first 2 hours is the ideal X distribution pattern.`;
+        return `${vel}% engagement, ${ageDays}d old. Strong first-hour velocity. X's time decay halves visibility score every 6 hours. A post that accumulates 80% of its engagement in the first 2 hours is the ideal X distribution pattern.`;
       if (score === 0.5)
-        return `${velocity}% engagement, ${ageDays} days old → moderate. Post when your audience is most active. Engage with every reply in the first 30 minutes — each reply you generate adds back to the engagement score.`;
-      return `${velocity}% engagement → weak velocity. X is a 6-hour platform — if a post doesn't ignite in the first 6 hours, 95% of its potential reach is gone. Reply to every comment immediately.`;
+        return `${vel}% engagement, ${ageDays}d old. Moderate. Post when your audience is active. Engage with every reply in the first 30 minutes. Each reply you generate resets the decay timer partially.`;
+      return `${vel}% engagement, weak velocity. X is a 6-hour platform — if a post doesn't ignite in the first 6 hours, 95% of its potential reach is gone.`;
     },
   },
   {
     id: "x-thread-format",
-    label: "Thread or long-form post format",
-    weight: 7,
+    label: "Thread or long-form post  (dwell time signal)",
+    weight: 5,
     tier: 2,
     autoAssessable: true,
     check: (d: VideoData) => {
@@ -185,69 +198,88 @@ export const X_CRITERIA: VRSCriterion[] = [
       const isLong = text.length > 200;
       if (isThread || isLong) return 1;
       if (text.length > 100) return 0.5;
-      return 0.25; // short posts can still perform, just lower ceiling
+      return 0.25;
     },
     rationale: (d: VideoData, score: number | null) => {
       const { isThread } = getX(d);
       if (score === 1)
-        return `${isThread ? "Thread detected" : "Long-form post"} → optimal format for X. Threads outperform single posts for educational content because each reply in the thread gets its own impression count. X's algorithm also rewards dwell time — longer content that holds attention scores higher.`;
+        return `${isThread ? "Thread detected" : "Long-form post"}. Each reply in a thread gets its own impression count. X's Grok transformer also rewards dwell time — the good_click_v2 signal (+10) measures 2+ minutes spent in a conversation. Threads and long posts trigger this.`;
       if (score === 0.5)
-        return `Post length is moderate. For prop trading content, threads work best for: step-by-step breakdowns, challenge progress updates (each day = one post in thread), and educational rule explanations. Single posts work best for: strong one-liner takes and data reveals.`;
-      return `Short post format. Single posts can go viral on X if the take is strong enough, but threads generate more reply depth, more bookmark rate, and more dwell time — all higher-weight signals than likes.`;
+        return `Moderate post length. Threads work best for step-by-step breakdowns, series (challenge Day N), and rule explanations. Single posts work best for strong one-liner takes and data reveals.`;
+      return `Short post. Single posts can go viral on X if the take is strong enough, but threads generate more reply depth, more bookmark rate, and more dwell time — all higher-weight signals.`;
     },
   },
   {
-    id: "x-visual-content",
-    label: "Native image or video (no platform watermarks)",
-    weight: 7,
+    id: "x-grok-relevance",
+    label: "Grok transformer relevance  (Jan 2026 Phoenix model)",
+    weight: 5,
+    tier: 2,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot directly measure. Since January 2026 X uses Phoenix — a Grok-based transformer that reads every post and watches every video (100M+ per day per Musk). Hand-engineered features are eliminated; the transformer learns patterns from engagement sequences. Post content that aligns with what your followers have historically engaged with. Topic drift hurts more in 2026 than before.",
+  },
+  {
+    id: "x-native-media",
+    label: "Native image or video (no cross-platform watermarks)",
+    weight: 4,
     tier: 2,
     autoAssessable: true,
     check: (d: VideoData) => {
       const { hasVideo, hasImage } = getX(d);
-      // Native media is rewarded; cross-platform watermarks are penalised
-      if (hasVideo || hasImage) return 0.75; // can't fully assess watermark status
-      return 0.3; // text-only is fine on X but visual content gets more impressions
+      if (hasVideo || hasImage) return 0.75;
+      return 0.3;
     },
-    rationale: (d: VideoData, score: number | null) => {
+    rationale: (d: VideoData, _score: number | null) => {
       const { hasVideo, hasImage } = getX(d);
       if (hasVideo || hasImage)
-        return `Native ${hasVideo ? "video" : "image"} detected → good. Visual content on X typically gets 2-3× more impressions than text-only posts. Important: never cross-post video with TikTok or Instagram watermarks — X detects and suppresses third-party branded content.`;
-      return `Text-only post. X text posts can outperform visual posts when the take is strong enough — X is the only major platform where text consistently beats video. However, a chart, screenshot of data, or native video adds impressions. Native beats cross-posted.`;
+        return `Native ${hasVideo ? "video" : "image"} detected. Good. Visual content on X typically gets 2-3x more impressions than text-only. Important: never cross-post video with TikTok or Instagram watermarks — X detects and deprioritises third-party branded content.`;
+      return `Text-only post. X is the only major platform where text routinely beats video. Strong text posts can still dominate. A chart, screenshot, or native video adds impressions but isn't mandatory.`;
     },
   },
 
-  // ─── TIER 3: Supporting Signals (15 points) ──────────────────────────────────
+  // ─── TIER 3: Supporting (17 points) ──────────────────────────────────────
 
   {
-    id: "x-hook-strength",
-    label: "First-line hook (bold claim, question, or number)",
-    weight: 6,
+    id: "x-tweepcred-threshold",
+    label: "TweepCred score above 0.65",
+    weight: 5,
+    tier: 3,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot directly measure. Every X account has a TweepCred score (0-100) calculated via a weighted PageRank approach: account age, follower-to-following ratio, engagement quality, interactions with high-quality users. Below 0.65 (out of 1.0 normalised), only 3 of your tweets are considered for distribution per cycle — a hard throttle. Premium subscribers get +4 to +16 points. Build TweepCred by engaging with high-TweepCred accounts authentically.",
+  },
+  {
+    id: "x-hook-first-line",
+    label: "Strong first-line hook (bold, number, question)",
+    weight: 5,
     tier: 3,
     autoAssessable: true,
     check: (d: VideoData) => {
       const text = (d.description || d.title || "").trim();
       const firstLine = text.split("\n")[0] || text.slice(0, 140);
-      const hasNumber  = /\d/.test(firstLine.slice(0, 60));
-      const hasQ       = /\?/.test(firstLine);
-      const hasBold    = /\b(never|always|stop|this|unpopular|hot take|controversial|nobody|everyone|most)/i.test(firstLine);
-      const hasDataHook= /\$|%|×|\d+[kKmM]|#\d/.test(firstLine);
-      if ((hasNumber || hasDataHook) && (hasQ || hasBold)) return 1;
-      if (hasNumber || hasDataHook || hasQ || hasBold) return 0.75;
+      const hasNumber   = /\d/.test(firstLine.slice(0, 60));
+      const hasQuestion = /\?/.test(firstLine);
+      const hasBold     = /never|always|stop|this|unpopular|hot take|nobody|everyone|most/i.test(firstLine);
+      const hasData     = /\$|%|\d+[kKmM]|#\d/.test(firstLine);
+      if ((hasNumber || hasData) && (hasQuestion || hasBold)) return 1;
+      if (hasNumber || hasData || hasQuestion || hasBold) return 0.75;
       return 0.25;
     },
     rationale: (d: VideoData, score: number | null) => {
       const firstLine = (d.description || d.title || "").split("\n")[0]?.slice(0, 100) ?? "";
       if (score === 1)
-        return `First line "${firstLine}" → strong hook. The first line on X is the entire post for most users (they don't click "read more"). Numbers + question or contrarian framing = highest dwell-time hook combination on X.`;
+        return `First line: "${firstLine}". Strong hook. The first 140 characters are the entire post for most users — they don't click "read more". Number + contrarian claim is the highest dwell-time hook combination on X.`;
       if (score !== null && score >= 0.75)
-        return `First line "${firstLine}" → good hook element detected. Optimal first-line formula: [Number/Data] + [Bold Claim] + [Implicit question]. Example: "97% of prop traders fail in month 1. Here's the one thing I did differently."`;
-      return `First line "${firstLine}" → weak hook. The first 140 characters are everything on X — it's all most users see before deciding to expand. Lead with a number, a surprising data point, or a contrarian claim that demands an explanation.`;
+        return `First line: "${firstLine}". Good hook element. Optimal formula: [Number/Data] + [Bold Claim] + [Implicit question]. Example: "97% of prop traders fail in month 1. Here's the one thing I did differently."`;
+      return `First line: "${firstLine}". Weak hook. Lead with a number, a surprising statistic, or a contrarian claim that demands explanation.`;
     },
   },
   {
     id: "x-hashtag-minimal",
-    label: "Hashtags: 0–2 (more = spam signal on X)",
-    weight: 5,
+    label: "Hashtags: 0-2 (more = spam)",
+    weight: 4,
     tier: 3,
     autoAssessable: true,
     check: (d: VideoData) => {
@@ -257,33 +289,33 @@ export const X_CRITERIA: VRSCriterion[] = [
     rationale: (d: VideoData, score: number | null) => {
       const tags = d.tags?.length ?? 0;
       if (score === 1)
-        return `${tags} hashtag${tags === 1 ? "" : "s"} → optimal. X's 2026 algorithm downgrades posts with multiple hashtags by 40% — they trigger a spam classifier. 0–2 targeted hashtags is the maximum. #forex and #proptrading are sufficient for niche targeting.`;
+        return `${tags} hashtag${tags === 1 ? "" : "s"}. Optimal. X 2026 downgrades posts with multiple hashtags by ~40% — they trigger the spam classifier. Grok reads the post text directly for topic classification; hashtags are not the discovery mechanism on X.`;
       if (score === 0.5)
-        return `${tags} hashtags → acceptable but borderline. X treats 3+ hashtags as a spam signal. Reduce to 2 maximum. Topic classification on X comes from NLP of the post text, not hashtags — they are less useful here than on Instagram or TikTok.`;
-      return `${tags} hashtags → spam signal. Multiple hashtags actively reduce reach on X by ~40% in 2026. Remove all but the 1–2 most relevant. X's Grok AI reads the post content for topic classification — hashtags are not the discovery mechanism here.`;
+        return `${tags} hashtags. Borderline. X treats 3+ hashtags as a spam signal. Reduce to maximum 2.`;
+      return `${tags} hashtags. Spam signal. Remove all but the 1-2 most relevant. Grok reads the post content directly — hashtags are not needed for discovery here.`;
     },
   },
   {
     id: "x-like-rate",
-    label: "Like rate  (baseline signal — lowest weight)",
-    weight: 4,
+    label: "Like rate  (weight +0.5 — lowest)",
+    weight: 3,
     tier: 3,
     autoAssessable: true,
     check: (d: VideoData) => {
-      const lr = d.likes / Math.max(1, d.views) * 100;
-      return lr >= 2 ? 1 : lr >= 0.5 ? 0.5 : 0;
+      const rate = d.likes / Math.max(1, d.views) * 100;
+      return rate >= 2 ? 1 : rate >= 0.5 ? 0.5 : 0;
     },
     rationale: (d: VideoData, score: number | null) => {
-      const lr = (d.likes / Math.max(1, d.views) * 100).toFixed(3);
+      const rate = (d.likes / Math.max(1, d.views) * 100).toFixed(3);
       if (score === 1)
-        return `Like rate ${lr}% → strong. Note: likes are the WEAKEST signal on X (0.5 points vs 27 points for a reply). High likes with low replies indicates content people appreciate but don't engage with — pleasant but not distribution-driving.`;
+        return `Like rate ${rate}%, strong. Note: likes are the LOWEST-weight positive signal on X (+0.5 — 27x smaller than a reply). High likes with low replies signals content people appreciate but don't engage with. Pleasant but not distribution-driving.`;
       if (score === 0.5)
-        return `Like rate ${lr}% → moderate. Likes are useful as a baseline engagement health check but carry the least algorithmic weight on X. If likes are high but replies and quote tweets are low, the content is too "agreeable" — add a more provocative element.`;
-      return `Like rate ${lr}% → weak. On X, a weak like rate combined with weak reply rate suggests the content isn't resonating with any signal. However: the correct fix is to increase replies and quote tweets, not likes — they carry 27-50× more weight.`;
+        return `Like rate ${rate}%, moderate. Likes are a baseline health check only. If likes are high but replies and quote tweets are low, the content is too "agreeable" — add a more provocative element to unlock higher-weight signals.`;
+      return `Like rate ${rate}%, weak. The correct fix is to increase replies and quote tweets, not likes — they carry 27-50x more ranking weight.`;
     },
   },
 
-  // ─── TIER 4: Baseline Signals (5 points) ─────────────────────────────────────
+  // ─── TIER 4: Baseline (8 points) ─────────────────────────────────────────
 
   {
     id: "x-post-timing",
@@ -293,16 +325,26 @@ export const X_CRITERIA: VRSCriterion[] = [
     autoAssessable: false,
     check: (_d: VideoData) => null,
     rationale: (_d: VideoData, _score: number | null) =>
-      "Cannot assess from metadata. X posts lose 50% of visibility score every 6 hours. The entire lifespan of a post is effectively its first 6 hours. Post when your audience is active — check X Analytics → Audience → Active Hours. For global finance audiences: 8–10 AM EST and 12–2 PM EST are typically highest-activity windows.",
+      "Cannot assess from metadata. X posts lose 50% of visibility score every 6 hours. The entire lifespan is effectively the first 6 hours. Post when your audience is active — X Analytics → Audience → Active Hours. For global finance audiences, 8-10 AM EST and 12-2 PM EST are typical peak windows.",
   },
   {
-    id: "x-author-reply",
-    label: "Author replied to replies (150× a like signal)",
+    id: "x-author-diversity",
+    label: "Author diversity penalty awareness",
+    weight: 3,
+    tier: 4,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "X applies an Author Diversity Scorer that limits how many posts from a single account appear in a user's feed per session. If you post 10 times a day, the algorithm won't show all 10 to followers — it picks the 2-3 strongest performers and suppresses the rest. Weaker posts dilute your average without adding reach. Sweet spot: 2-3 posts per day optimised for quality.",
+  },
+  {
+    id: "x-negative-feedback",
+    label: "Negative feedback avoidance  (weight -74 / -369)",
     weight: 2,
     tier: 4,
     autoAssessable: false,
     check: (_d: VideoData) => null,
     rationale: (_d: VideoData, _score: number | null) =>
-      "Cannot assess from metadata. A reply that gets the original author to reply back scores +75 in X's algorithm — 150× the value of a like. This is the single highest-weight action on the platform. Brief creators: reply to EVERY comment in the first 30 minutes. One back-and-forth reply chain is worth more algorithmically than 150 likes.",
+      "Negative feedback weights are massive: -74 for \"show less often\"/mute/block, -369 for report. A single block wipes out 148 likes worth of score. X optimises for long-term retention, not short-term engagement — rage-bait that gets clicks but makes users block you is a net negative. Avoid inflammatory framing that goes beyond contrarian into attacking.",
   },
 ];

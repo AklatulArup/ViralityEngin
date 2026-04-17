@@ -8,13 +8,23 @@ interface XBatchResultProps {
   posts: XPostData[];
 }
 
-// X algorithm weights (from open-source code)
+// X algorithm weights — VERIFIED from github.com/twitter/the-algorithm-ml
+// (scored_tweets_model_weight_* config, April 2023 canonical reference).
+// Normalised so fav=1 for readable display. Raw source values in comments.
 const SIGNAL_WEIGHTS = {
-  replies:   27,
-  quotes:    50,
-  bookmarks: 20,
-  reposts:   2,
-  likes:     1,
+  replies:          27,   // raw: 13.5  (reply)
+  replyByAuthor:   150,   // raw: 75.0  (reply_engaged_by_author — highest positive weight)
+  profileClick:     24,   // raw: 12.0  (good_profile_click)
+  goodClick:        22,   // raw: 11.0  (good_click — click into conversation)
+  dwell2min:        20,   // raw: 10.0  (good_click_v2 — stay 2+ min in convo)
+  reposts:           2,   // raw: 1.0   (retweet)
+  likes:             1,   // raw: 0.5   (fav — baseline)
+  videoHalfPlay:  0.01,   // raw: 0.005 (video_playback50)
+  // Bookmarks and quotes are NOT in the open-source heavy ranker config.
+  // Widely cited in secondary articles but not in the source code weights.
+  // Kept in the UI for completeness but marked as derived estimates.
+  bookmarks:         4,   // derived estimate (utility/save signal)
+  quotes:            4,   // derived estimate (repost + reply hybrid)
 };
 
 function getXRSColor(score: number): string {
@@ -158,11 +168,11 @@ export default function XBatchResult({ posts }: XBatchResultProps) {
         </div>
 
         {[
-          { label: "Replies",   raw: sigReplies,   weight: SIGNAL_WEIGHTS.replies,   color: "#A78BFA", note: "27× a like — #1 signal" },
-          { label: "Quotes",    raw: sigQuotes,    weight: SIGNAL_WEIGHTS.quotes,    color: "#60A5FA", note: "50× a like — highest weight" },
-          { label: "Bookmarks", raw: sigBookmarks, weight: SIGNAL_WEIGHTS.bookmarks, color: "#F59E0B", note: "20× a like — utility signal" },
-          { label: "Reposts",   raw: sigReposts,   weight: SIGNAL_WEIGHTS.reposts,   color: "#2ECC8A", note: "2× a like" },
-          { label: "Likes",     raw: sigLikes,     weight: SIGNAL_WEIGHTS.likes,     color: "#9E9C97", note: "baseline — lowest weight" },
+          { label: "Replies",   raw: sigReplies,   weight: SIGNAL_WEIGHTS.replies,   color: "#A78BFA", note: "27x a like (Heavy Ranker +13.5)" },
+          { label: "Quotes",    raw: sigQuotes,    weight: SIGNAL_WEIGHTS.quotes,    color: "#60A5FA", note: "Quote signal (derived estimate)" },
+          { label: "Bookmarks", raw: sigBookmarks, weight: SIGNAL_WEIGHTS.bookmarks, color: "#F59E0B", note: "Utility signal (derived estimate)" },
+          { label: "Reposts",   raw: sigReposts,   weight: SIGNAL_WEIGHTS.reposts,   color: "#2ECC8A", note: "2x a like (Heavy Ranker +1.0)" },
+          { label: "Likes",     raw: sigLikes,     weight: SIGNAL_WEIGHTS.likes,     color: "#9E9C97", note: "Baseline (+0.5 — lowest weight)" },
         ].map(sig => {
           const weighted = sig.raw * sig.weight;
           const maxWeighted = Math.max(sigQuotes * 50, 0.001);
@@ -356,11 +366,14 @@ export default function XBatchResult({ posts }: XBatchResultProps) {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           {[
-            "Reply that gets author to reply back = +75 pts (150× a like) — reply to EVERY comment in first 30 min",
-            "Quote tweet = +25 pts (50× a like) — contrarian takes invite public responses",
-            "External links in post body = −75 pts — always put links in first reply",
+            "Reply that gets author to reply back = +75 in Heavy Ranker (150x a like) — reply to EVERY comment in first 30 min",
+            "Reply = +13.5 (27x a like) — second highest positive weight in the ranker",
+            "Profile click + engagement = +12 — optimise bio + pinned post so visitors convert",
+            "External links in post body = low weight (X keeps users on-platform) — always put links in first reply",
             "Posts lose 50% visibility every 6 hours — the entire window is 6 hours, not 24",
-            "2+ hashtags reduces reach by ~40% — maximum 1-2 highly targeted tags",
+            "TweepCred below 0.65 = only 3 of your tweets considered per cycle (hard throttle)",
+            "2+ hashtags triggers spam classifier — max 1-2 highly targeted tags",
+            "Negative feedback weights: -74 for 'show less often'/mute/block, -369 for report",
           ].map((rule, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
               <div style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--color-text-secondary)", marginTop: 6, flexShrink: 0 }} />

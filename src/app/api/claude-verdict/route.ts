@@ -71,31 +71,40 @@ const PLATFORM_CONTEXT: Record<string, string> = {
     "CTA hierarchy: external share to trading group > loop design > Long-Form bridge > FundedNext free trial.",
 
   tiktok:
-    "PLATFORM: TikTok FYP. Formula: Completion(45%) + Rewatch(35%) + DM_send(20%). " +
-    "Leaked points: DM=25, Save=15, Finish=8, Comment=8, Like=3. Kill: <70% completion = 200-view jail. " +
-    "PSYCHOLOGY: Completion is driven by the Zeigarnik effect — never resolve the tension before the final 5 seconds. " +
-    "Rewatch is driven by hidden information — design a detail that only makes sense on second viewing. " +
-    "DM sends are driven by tribal identity ('this is us') or anxiety ('this could affect you') — not generic shareable content. " +
+    "PLATFORM: TikTok FYP (2026 — US algorithm now on Oracle/USDS). Primary signals: Completion rate (target 70%+ in 2026, up from 50%), Rewatch/Loop rate (outranks follower count), Share rate (27x a like in weights). " +
+    "Qualified View = watched 5+ seconds (Creator Rewards payout metric). Videos over 60s earn higher payout tier. " +
+    "Kill: sub-70% completion = 200-view jail. CapCut/IG/YT watermarks = immediate deprioritisation. " +
+    "2026 additions: TikTok search is a direct ranking signal (49% of US users treat it as a search engine per Adobe). Spoken words, captions, on-screen text are indexed by the SEO system. Original audio now outperforms trending audio for long-term distribution. " +
+    "PSYCHOLOGY: Completion driven by Zeigarnik tension — never resolve before final 5 seconds. Rewatch driven by hidden information — design a detail that only makes sense on second viewing. Shares driven by tribal identity ('this is us') or anxiety ('this could affect you'), not generic shareable content. " +
     "Like = dopamine but NO distribution power. Tell creators: stop optimising for likes. " +
-    "The 3-beat arc for TikTok: Hook (0-2s pattern interrupt) → Deliver (3s-end-5s rapid revelation) → Residue (final 3s emotional state). " +
-    "Niche: prop trading → day trading → finance → entrepreneur → making money online. " +
-    "CTA: 'Send this to your trading group' > save > substantive comment > FundedNext free trial.",
+    "Optimal duration: 20-40s (max completion) OR 60-180s (Creator Rewards boost). 45-55s is the dead zone. " +
+    "3-beat arc: Hook (0-2s pattern interrupt) → Deliver (3s to end-5s) → Residue (final 3s emotional state). " +
+    "CTA: 'Send this to your trading group' > save for reference > substantive comment > FundedNext free trial.",
 
   instagram:
-    "PLATFORM: Instagram Reels. Formula: DM_sends(40%) + Saves(30%) + 3s_hold+Watch(30%). " +
-    "Mosseri confirmed DM sends = #1 signal. Saves = 3x like. Kill: <40% 3-sec hold = 5-10x less reach. " +
-    "PSYCHOLOGY: DM sends are driven by the belonging signal — 'this is for a specific person in my life.' " +
-    "Saves are driven by anxiety reduction — 'I can't memorise this, I'll lose access to it.' Reference utility = saves. " +
-    "3-sec hold is purely visual pattern interruption — the caption overlay appears at 1.5s so the hook MUST be visual. " +
-    "The dual-signal holy grail: one CTA that creates both belonging (DM) and anxiety reduction (Save) simultaneously. " +
-    "Niche: prop trading → personal finance → financial freedom → lifestyle aspirational. " +
+    "PLATFORM: Instagram Reels (2026 — three confirmed signals per Mosseri). " +
+    "CONFIRMED RANKING SIGNALS: (1) Watch time (most important across all surfaces), (2) Sends per reach (DM shares — 3-5x a like, primary growth signal for non-follower reach), (3) Likes per reach (connected reach signal). " +
+    "Kill thresholds: 10+ reposts in 30 days = EXCLUDED from Explore/Reels recommendations entirely. Watermarks (TikTok/CapCut/YT) = immediate disqualification. Failed 3-second hold in audition phase = throttled before your own followers see it. " +
+    "2026 additions: Reels up to 3 minutes recommended to non-followers. 'Your Algorithm' feature (Dec 2025) lets users add/remove topics. Trial Reels test content with non-followers before exposing to your audience. Originality Score penalises recycled content. Keyword-rich captions beat hashtag stuffing by ~30%. Hashtags: 3-5 specific is enough. " +
+    "PSYCHOLOGY: DM sends driven by belonging — 'this is for a specific person I know'. Saves driven by anxiety reduction — 'I'll need this later'. 3-sec hold is purely visual — caption overlay hits at 1.5s so hook MUST be visual or large text. " +
+    "Dual-signal holy grail: one CTA that creates both belonging (DM) and reference value (save). " +
+    "Optimal duration: 15-30s (max completion) OR 60-180s (long-form Reel push). " +
     "CTA: DM + save dual signal > DM send to named recipient > save for reference > FundedNext free trial.",
+
+  x:
+    "PLATFORM: X (Twitter) — 2026 Grok/Phoenix transformer ranker. OPEN-SOURCE WEIGHTS (github.com/twitter/the-algorithm-ml): " +
+    "Like +0.5, Retweet +1.0, Reply +13.5 (27x a like), Reply engaged by author +75 (150x a like — single highest positive weight), Profile click + engagement +12, Good click into convo +11, Stay 2+ min in convo +10, Video 50% playback +0.005. Negative: 'Show less often'/mute/block -74, Report -369. " +
+    "Kill thresholds: TweepCred score below 0.65 = only 3 of your tweets considered per cycle. External link in post body = low reach (X keeps users on-platform). 2+ hashtags triggers spam classifier, reduces reach ~40%. 6-hour time decay: post loses 50% visibility every 6 hours. " +
+    "2026 additions: Phoenix transformer reads post text + watches videos (100M+ daily per Musk). Hand-engineered features eliminated. Author Diversity Penalty limits posts per account per feed session. Premium boost: +4 to +16 TweepCred points. Community posts now surface to non-members. Grok-powered 'For You' customisation via natural language. " +
+    "PSYCHOLOGY: X is the status and opinion engine. Replies are weighted so high (27x a like) because they signal conversation quality and opinion dominance. A reply-chain where the author replies back scores the highest of anything on the platform. " +
+    "CTA: reply to EVERY reply in first 30 min (unlock the +75 weight) > put links in first reply never the post > 0-2 hashtags max > 2-3 posts/day (author diversity) > post during first 6-hour window > FundedNext free trial in bio.",
 };
 
 function getPlatformContext(platform?: string): string {
   if (platform === "tiktok")        return PLATFORM_CONTEXT.tiktok;
   if (platform === "instagram")     return PLATFORM_CONTEXT.instagram;
   if (platform === "youtube_short") return PLATFORM_CONTEXT.youtube_short;
+  if (platform === "x" || platform === "twitter") return PLATFORM_CONTEXT.x;
   return PLATFORM_CONTEXT.youtube;
 }
 

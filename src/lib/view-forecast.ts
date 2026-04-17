@@ -195,42 +195,45 @@ function computePlatformScore(video: EnrichedVideo, platform: ForecastPlatform):
     };
   }
 
-  // ── TikTok FYP ─────────────────────────────────────────────────────────
-  // Formula: (Completion×0.45) + (Rewatch×0.35) + (DM_send×0.20)
-  // Leaked internal points: DM=25, Save=15, Finish=8, Comment=8, Like=3
-  // Completion threshold raised to 70% in 2024 (from 50%)
+  // ── TikTok FYP (2026 — Oracle/USDS) ────────────────────────────────────
+  // Formula: (Completion×0.40) + (Rewatch×0.40) + (DM_send×0.20)
+  // 2026 change: rewatch rate now outranks follower count and is tied with
+  // completion as the primary signal. Completion threshold raised to 70%.
+  // Qualified View (≥5s) is the Creator Rewards payout metric.
   if (platform === "tiktok") {
     const completion = Math.min(1, eng / 0.07);
     const rewatch    = Math.min(1, video.velocity / 50000);
     const dmSend     = Math.min(1, shareRate / 0.008);
-    const score = completion * 0.45 + rewatch * 0.35 + dmSend * 0.20;
+    const score = completion * 0.40 + rewatch * 0.40 + dmSend * 0.20;
     return {
       platform, score, platformLabel: PLATFORM_LABELS[platform],
-      formula: "TT = (Completion×0.45) + (Rewatch×0.35) + (DM_send×0.20)",
+      formula: "TT 2026 = (Completion×0.40) + (Rewatch×0.40) + (DM_send×0.20)",
       signals: [
-        { label: "Completion rate  [≥70% gate; <70% = 200-view jail]", value: completion, weight: 0.45, description: `${video.engagement.toFixed(1)}% eng → ${(completion*100).toFixed(0)}%` },
-        { label: "Rewatch/Loop  [15pts internal; 1×3 beats 3×1]",       value: rewatch,    weight: 0.35, description: `${video.velocity.toLocaleString()} views/day → ${(rewatch*100).toFixed(0)}%` },
-        { label: "DM send  [25pts internal — highest single action]",    value: dmSend,     weight: 0.20, description: `${(shareRate*100).toFixed(3)}% share rate → ${(dmSend*100).toFixed(0)}%` },
+        { label: "Completion  [70% threshold in 2026 — below = 200-view jail]", value: completion, weight: 0.40, description: `${video.engagement.toFixed(1)}% eng → ${(completion*100).toFixed(0)}%` },
+        { label: "Rewatch/Loop  [outranks follower count in 2026 algorithm]",   value: rewatch,    weight: 0.40, description: `${video.velocity.toLocaleString()} views/day → ${(rewatch*100).toFixed(0)}%` },
+        { label: "DM send  [shares weighted far above likes in ranker]",         value: dmSend,     weight: 0.20, description: `${(shareRate*100).toFixed(3)}% share rate → ${(dmSend*100).toFixed(0)}%` },
       ],
     };
   }
 
-  // ── Instagram Reels ────────────────────────────────────────────────────
-  // Formula: (DM_sends×0.40) + (Saves×0.30) + (3s_hold+Watch×0.30)
-  // Mosseri confirmed DM sends = "#1 signal for non-follower reach" (Jan 2025, Feb 2026)
-  // Saves = 3× weight of a like
-  // 3-sec hold <40% = 5-10× less reach (immediate kill gate)
-  const dmSends  = Math.min(1, shareRate / 0.005);
-  const saves    = Math.min(1, commentRate / 0.004);
-  const hookWt   = Math.min(1, eng / 0.05);
-  const score = dmSends * 0.40 + saves * 0.30 + hookWt * 0.30;
+  // ── Instagram Reels (2026 — Mosseri's confirmed three signals) ─────────
+  // Formula: (Watch_time×0.45) + (Sends_per_reach×0.35) + (Likes_per_reach×0.20)
+  // CONFIRMED by Adam Mosseri, January 2025 + reiterated February 2026:
+  //   1. Watch Time — most important signal across all surfaces
+  //   2. Sends per Reach — 3-5× a like for reaching non-followers (top growth signal)
+  //   3. Likes per Reach — still matters, weighted more for connected reach
+  // 10+ reposts in 30 days = excluded from recommendations entirely (Originality Score)
+  const watchTime = Math.min(1, eng / 0.05);
+  const sendsPerReach = Math.min(1, shareRate / 0.005);
+  const likesPerReach = Math.min(1, (video.likes / Math.max(1, video.views)) / 0.05);
+  const score = watchTime * 0.45 + sendsPerReach * 0.35 + likesPerReach * 0.20;
   return {
     platform, score, platformLabel: PLATFORM_LABELS[platform],
-    formula: "IG = (DM_sends×0.40) + (Saves×0.30) + (3s_hold+Watch×0.30)",
+    formula: "IG 2026 = (Watch_time×0.45) + (Sends/reach×0.35) + (Likes/reach×0.20)",
     signals: [
-      { label: "DM sends/reach  [~40%; Mosseri #1 signal for non-follower reach]", value: dmSends, weight: 0.40, description: `${(shareRate*100).toFixed(3)}% share rate → ${(dmSends*100).toFixed(0)}%` },
-      { label: "Saves  [~30%; 3× weight of like; extends shelf life 2-4 weeks]",   value: saves,   weight: 0.30, description: `${(commentRate*100).toFixed(2)}% comment proxy → ${(saves*100).toFixed(0)}%` },
-      { label: "3-sec hold + watch  [~30%; <40% hold = 5-10× less reach]",         value: hookWt,  weight: 0.30, description: `${video.engagement.toFixed(1)}% eng → ${(hookWt*100).toFixed(0)}%` },
+      { label: "Watch time  [Mosseri 2026 #1 signal — most important across all surfaces]",  value: watchTime,     weight: 0.45, description: `${video.engagement.toFixed(1)}% eng → ${(watchTime*100).toFixed(0)}%` },
+      { label: "Sends per reach  [DM shares — 3-5× a like for non-follower reach]",          value: sendsPerReach, weight: 0.35, description: `${(shareRate*100).toFixed(3)}% share rate → ${(sendsPerReach*100).toFixed(0)}%` },
+      { label: "Likes per reach  [ratio not raw count — weighted for connected reach]",       value: likesPerReach, weight: 0.20, description: `${((video.likes / Math.max(1, video.views)) * 100).toFixed(2)}% like rate → ${(likesPerReach*100).toFixed(0)}%` },
     ],
   };
 }

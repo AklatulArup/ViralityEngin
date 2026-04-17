@@ -1,26 +1,96 @@
 import type { VideoData, VRSCriterion } from "./types";
 
-// TikTok Readiness Score: 20 criteria, 100 points total
-// Based on TikTok's algorithm signals: shares are 27x more powerful than likes,
-// watch time ratio drives exponential distribution, saves signal long-term value.
+// TikTok Readiness Score (TRS) — 2026 edition
+// 20 criteria, 100 points total.
+//
+// Sources: TikTok Creator Learning Hub (Jan 2026), Socialinsider 2025 Benchmarks,
+// Dash Hudson 2025 Social Media Benchmarks, TikTok USDS algorithm retraining (Oracle, Jan 2026).
+//
+// Key 2026 changes folded in:
+//  • Completion threshold raised to ~70% (was 50%).
+//  • "Qualified View" = watched ≥5 seconds — explicit ranking metric.
+//  • Rewatch rate now outranks follower count.
+//  • TikTok SEO is a direct ranking signal — spoken words, captions, on-screen text are indexed.
+//  • Original audio now preferred over trending audio for long-term distribution.
+//  • 1-3 minute videos get aggressive push via Creator Rewards Program.
+//  • Oracle/USDS retraining on US-only data — timing instability through mid-2026.
+//  • Aggregated / reposted / watermarked content (CapCut/IG/YT logos) actively demoted.
 
-// Helper to safely access TikTok-specific fields
 function getTikTok(d: VideoData) {
   return {
-    shares: d.shares ?? 0,
-    saves: d.saves ?? 0,
-    tags: d.tags || [],
+    shares:    d.shares ?? 0,
+    saves:     d.saves ?? 0,
+    tags:      d.tags || [],
     followers: (d as { creatorFollowers?: number }).creatorFollowers ?? 0,
-    soundName: (d as { soundName?: string }).soundName ?? "",
+    soundName:     (d as { soundName?: string }).soundName ?? "",
+    soundOriginal: (d as { soundOriginal?: boolean }).soundOriginal ?? false,
+    description: d.description || "",
   };
 }
 
 export const TT_CRITERIA: VRSCriterion[] = [
-  // ─── TIER 1: Critical (50 points) ───
+
+  // ─── TIER 1: Critical (50 points) ────────────────────────────────────────
+
+  {
+    id: "tt-completion-70",
+    label: "Completion rate toward 70% threshold",
+    weight: 14,
+    tier: 1,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { followers } = getTikTok(d);
+      if (d.views === 0 || d.durationSeconds === 0) return null;
+      const viewsPerFollower = followers > 0 ? d.views / followers : 1;
+      const dur = d.durationSeconds;
+      const inOptimalLength = dur >= 15 && dur <= 45;
+      if (viewsPerFollower > 3 && inOptimalLength) return 1;
+      if (viewsPerFollower > 1 && dur <= 60) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const { followers } = getTikTok(d);
+      const vpf = followers > 0 ? (d.views / followers).toFixed(1) : "N/A";
+      const dur = d.durationSeconds;
+      if (score === null) return "Insufficient data for completion estimate.";
+      if (score === 1)
+        return `${vpf}x reach vs follower count, ${dur}s duration. Strong signal that completion is near or above TikTok 2026's 70% threshold. The algorithm promotes content that holds viewers to the end.`;
+      if (score === 0.5)
+        return `${vpf}x reach, ${dur}s. Moderate completion. In 2026 the minimum for wider distribution is 70%, up from 50%. If duration is over 45s, consider cutting to 20-30s to raise completion ratio.`;
+      return `${vpf}x reach, ${dur}s. Likely under the 70% completion threshold. Videos that miss this bar stay in 200-view jail. Shorten to 20-30s, or add rewatch hooks (hidden details that resolve on second viewing).`;
+    },
+  },
+  {
+    id: "tt-rewatch-signal",
+    label: "Rewatch / loop signal  (strongest 2026 signal)",
+    weight: 11,
+    tier: 1,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { shares, saves } = getTikTok(d);
+      if (d.views === 0) return 0;
+      const saveR  = (saves  / d.views) * 100;
+      const shareR = (shares / d.views) * 100;
+      const combined = saveR + shareR;
+      if (combined >= 1.5) return 1;
+      if (combined >= 0.7) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const { shares, saves } = getTikTok(d);
+      const saveR  = d.views > 0 ? ((saves  / d.views) * 100).toFixed(3) : "0";
+      const shareR = d.views > 0 ? ((shares / d.views) * 100).toFixed(3) : "0";
+      if (score === 1)
+        return `Save rate ${saveR}% + share rate ${shareR}% = strong rewatch signal. In 2026, rewatch rate outranks follower count. One viewer watching three times signals more than three viewers watching once.`;
+      if (score === 0.5)
+        return `Save ${saveR}% + share ${shareR}%, moderate. Design for rewatch: add a hidden detail at 3 seconds that only makes sense on second viewing, or end with a frame that loops seamlessly into the opening.`;
+      return `Save ${saveR}% + share ${shareR}%, weak rewatch signal. Rewatches are the single highest-value 2026 TikTok signal. Add a reveal in the last 2 seconds that makes viewers want to see the setup again.`;
+    },
+  },
   {
     id: "tt-share-rate",
-    label: "Share Rate",
-    weight: 12,
+    label: "Share rate  (27x a like in ranking weights)",
+    weight: 9,
     tier: 1,
     autoAssessable: true,
     check: (d: VideoData) => {
@@ -33,355 +103,271 @@ export const TT_CRITERIA: VRSCriterion[] = [
       const { shares } = getTikTok(d);
       const ratio = d.views > 0 ? ((shares / d.views) * 100).toFixed(3) : "0";
       if (score === 1)
-        return `Share rate is ${ratio}% (>=1%). Exceptional — shares are TikTok's #1 signal, weighted 27x more than likes. This content is being actively spread.`;
+        return `Share rate ${ratio}%, strong. Shares are weighted far higher than likes in TikTok's ranking. A video with 50,000 views and 200 shares outperforms one with 100,000 views and 20 shares over time.`;
       if (score === 0.5)
-        return `Share rate is ${ratio}% (0.3-1%). Decent sharing activity but below viral threshold. Add a stronger "send this to someone who..." CTA.`;
-      return `Share rate is ${ratio}% (<0.3%). Low sharing — the #1 growth signal on TikTok. Content needs a more shareable hook or relatable moment.`;
-    },
-  },
-  {
-    id: "tt-watch-time",
-    label: "Watch Time Proxy",
-    weight: 11,
-    tier: 1,
-    autoAssessable: true,
-    check: (d: VideoData) => {
-      const { followers } = getTikTok(d);
-      if (d.views === 0 || d.durationSeconds === 0) return null;
-      // Proxy: high views relative to followers + short duration = high completion
-      const viewsPerFollower = followers > 0 ? d.views / followers : 1;
-      const isShort = d.durationSeconds <= 60;
-      if (viewsPerFollower > 3 && isShort) return 1;
-      if (viewsPerFollower > 1 || (viewsPerFollower > 0.5 && isShort)) return 0.5;
-      return 0;
-    },
-    rationale: (d: VideoData, score: number | null) => {
-      const { followers } = getTikTok(d);
-      const vpf = followers > 0 ? (d.views / followers).toFixed(1) : "N/A";
-      if (score === null)
-        return "Insufficient data for watch time estimation (needs views and duration).";
-      if (score === 1)
-        return `Views/follower ratio: ${vpf}x with ${d.durationSeconds}s duration. Strong completion signal — short video with high reach suggests excellent watch-through rate.`;
-      if (score === 0.5)
-        return `Views/follower ratio: ${vpf}x. Moderate reach — content is getting some FYP distribution but not maximum completion.`;
-      return `Views/follower ratio: ${vpf}x. Low reach relative to audience — suggests viewers aren't watching to completion. Shorten or add a stronger hook.`;
+        return `Share rate ${ratio}%, moderate. Add a "send this to someone who..." moment targeted at a specific type of person, not generic shareable content. Tribal identity content drives DM shares.`;
+      return `Share rate ${ratio}%, weak. Shares are the #1 distribution-triggering action on TikTok. Content that doesn't generate shares rarely breaks past the first test audience.`;
     },
   },
   {
     id: "tt-save-rate",
-    label: "Save Rate",
-    weight: 9,
+    label: "Save rate  (reference / utility signal)",
+    weight: 8,
     tier: 1,
     autoAssessable: true,
     check: (d: VideoData) => {
       const { saves } = getTikTok(d);
       if (d.views === 0) return 0;
       const ratio = (saves / d.views) * 100;
-      return ratio >= 0.5 ? 1 : ratio >= 0.2 ? 0.5 : 0;
+      if (ratio >= 2)   return 1;
+      if (ratio >= 0.5) return 0.5;
+      return 0;
     },
     rationale: (d: VideoData, score: number | null) => {
       const { saves } = getTikTok(d);
       const ratio = d.views > 0 ? ((saves / d.views) * 100).toFixed(3) : "0";
       if (score === 1)
-        return `Save rate is ${ratio}% (>=0.5%). Viewers are bookmarking for later — strong signal of long-term value content.`;
+        return `Save rate ${ratio}%, strong. Per Hootsuite 2025, save rate above 2% makes a video 3.4x more likely to hit the FYP. Content with high saves has reference value: step-by-step tutorials, comparison lists, specific dollar amounts.`;
       if (score === 0.5)
-        return `Save rate is ${ratio}% (0.2-0.5%). Some save activity — add more "save this for later" CTAs or actionable tips.`;
-      return `Save rate is ${ratio}% (<0.2%). Low saves — content needs more reference value. Tips, tutorials, and lists drive saves.`;
+        return `Save rate ${ratio}%, moderate. Brand benchmark is 1.2%. Add one piece of specific reference information — an exact rule, a specific number, a comparison — that viewers will want to return to.`;
+      return `Save rate ${ratio}%, weak. Saves signal lasting utility. Content that is purely entertaining gets watched and forgotten; content with a specific takeaway gets saved.`;
     },
   },
   {
-    id: "tt-comment-engagement",
-    label: "Comment Engagement",
-    weight: 9,
+    id: "tt-qualified-view",
+    label: "5-second qualified view (Creator Rewards)",
+    weight: 8,
     tier: 1,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const eng = (d.likes + d.comments + (d.shares ?? 0) + (d.saves ?? 0)) / Math.max(1, d.views) * 100;
+      const dur = d.durationSeconds;
+      if (eng >= 3 && dur >= 60) return 1;
+      if (eng >= 1.5) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const eng = ((d.likes + d.comments + (d.shares ?? 0) + (d.saves ?? 0)) / Math.max(1, d.views) * 100).toFixed(2);
+      const dur = d.durationSeconds;
+      if (score === 1)
+        return `${eng}% engagement, ${dur}s duration. Strong qualified-view signal. "Qualified Views" (watched 5+ seconds) are the 2026 Creator Rewards metric. Videos over 60s earn ~$0.50 to $1.00 per 1,000 qualified views.`;
+      if (score === 0.5)
+        return `${eng}% engagement, ${dur}s. Moderate. The first 2 seconds determine qualified views. Open with visual pattern interrupt, bold text statement, or provocative claim — never a logo or intro sequence.`;
+      return `${eng}% engagement, ${dur}s. Weak qualified-view signal. If viewers drop off before the 5-second mark, the video fails TikTok's qualified-view threshold and gets buried.`;
+    },
+  },
+
+  // ─── TIER 2: Strong signals (25 points) ──────────────────────────────────
+
+  {
+    id: "tt-seo-keywords",
+    label: "TikTok SEO — keywords in caption and speech",
+    weight: 6,
+    tier: 2,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { description, tags } = getTikTok(d);
+      const captionLen = description.length;
+      const hasKeywords = tags.length >= 2 && tags.length <= 6;
+      const hasContextualCaption = captionLen > 50 && captionLen < 200;
+      if (hasKeywords && hasContextualCaption) return 1;
+      if (hasKeywords || hasContextualCaption) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const { description, tags } = getTikTok(d);
+      if (score === 1)
+        return `Caption is ${description.length} chars with ${tags.length} keyword tags. Strong SEO signal. In 2026 TikTok search is a direct ranking metric. 49% of US consumers use TikTok as a search engine (Adobe, Jan 2026). TikTok transcribes spoken words and indexes them.`;
+      if (score === 0.5)
+        return `Partial SEO signal. TikTok 2026 treats spoken words, captions, and on-screen text as search indexing input. Say the keyword in the first 3 seconds. Write it on screen. Include it in the caption.`;
+      return `Weak SEO signal. Generic captions with few specific keywords miss TikTok's search surface. Unlike FYP distribution which decays within 48 hours, search-driven discovery compounds over weeks.`;
+    },
+  },
+  {
+    id: "tt-original-audio",
+    label: "Original audio or voice (2026 boost)",
+    weight: 6,
+    tier: 2,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { soundName, soundOriginal } = getTikTok(d);
+      if (soundOriginal) return 1;
+      if (soundName && soundName.length > 0) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const { soundName, soundOriginal } = getTikTok(d);
+      if (score === 1)
+        return `Original audio detected${soundName ? ` (${soundName})` : ""}. TikTok 2026 favours videos with original voice or music over videos using only trending sounds. Original audio that other creators reuse creates a viral flywheel.`;
+      if (score === 0.5)
+        return `Using a named sound (${soundName}). Fine as a baseline; trending sounds give initial distribution boost during the first 48 hours of their early-adoption phase. Pair with your own voiceover to compound the ranking advantage.`;
+      return `No sound signal detected. In 2026 videos with a real person speaking to camera outperform music-only clips. Add a voiceover even on a music-driven clip.`;
+    },
+  },
+  {
+    id: "tt-comment-depth",
+    label: "Comment depth — substantive replies",
+    weight: 5,
+    tier: 2,
     autoAssessable: true,
     check: (d: VideoData) => {
       if (d.views === 0) return 0;
       const ratio = (d.comments / d.views) * 100;
-      return ratio >= 0.5 ? 1 : ratio >= 0.2 ? 0.5 : 0;
+      if (ratio >= 1)   return 1;
+      if (ratio >= 0.5) return 0.5;
+      return 0;
     },
     rationale: (d: VideoData, score: number | null) => {
       const ratio = d.views > 0 ? ((d.comments / d.views) * 100).toFixed(3) : "0";
       if (score === 1)
-        return `Comment rate is ${ratio}% (>=0.5%). Strong discussion — TikTok heavily boosts debate-worthy content. Replies become mini-videos in feeds.`;
+        return `Comment rate ${ratio}%, strong. In 2026 TikTok weights comment depth over raw count. Longer, substantive comments signal deeper engagement than emoji-only replies. Reply to substantive comments in the first hour to compound the signal.`;
       if (score === 0.5)
-        return `Comment rate is ${ratio}% (0.2-0.5%). Moderate discussion. Ask polarizing questions or add a "hot take" to drive more comments.`;
-      return `Comment rate is ${ratio}% (<0.2%). Low comments signal passive viewing. Add opinion prompts, "what would you do?" scenarios, or controversial takes.`;
+        return `Comment rate ${ratio}%, moderate. Ask a specific, unanswerable-in-one-word question in the caption or on-screen text to invite substantive replies.`;
+      return `Comment rate ${ratio}%, weak. Low comment engagement is a strong kill signal — TikTok treats it as evidence the content didn't spark genuine reaction.`;
     },
   },
   {
-    id: "tt-hook",
-    label: "Hook Effectiveness (1st second)",
-    weight: 9,
-    tier: 1,
-    autoAssessable: false,
-    check: () => null,
-    rationale: () =>
-      "TikTok's first-second hook is the most critical factor — a visual pattern interrupt that stops the scroll. Requires video review to assess. Look for: text overlay in frame 1, unexpected visual, direct eye contact, or movement.",
+    id: "tt-originality",
+    label: "Originality — no watermarks / repost markers",
+    weight: 5,
+    tier: 2,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { description, soundOriginal } = getTikTok(d);
+      const t = description.toLowerCase();
+      const isRepost = /repost|via @|credit to|credits:|cr:/.test(t);
+      if (isRepost) return 0;
+      if (soundOriginal) return 1;
+      return 0.5;
+    },
+    rationale: (_d: VideoData, score: number | null) => {
+      if (score === 1)
+        return `Original content with original audio. Full originality score. TikTok 2026 actively demotes duplicated material and content sourced from other creators. Originality is a baseline eligibility criterion.`;
+      if (score === 0.5)
+        return `No repost markers detected. Native creation on-platform (not uploaded from CapCut/IG/YouTube with watermarks) is required for FYP eligibility. Watermarks from other platforms tank reach.`;
+      return `Repost or credit signal in caption. If the content is original, rewrite the caption to remove "repost", "via @", or "credit to" — the algorithm uses these as demotion signals.`;
+    },
   },
 
-  // ─── TIER 2: Strong (28 points) ───
-  {
-    id: "tt-caption",
-    label: "Caption Quality",
-    weight: 8,
-    tier: 2,
-    autoAssessable: true,
-    check: (d: VideoData) => {
-      const caption = d.description || d.title;
-      if (!caption) return 0;
-      const len = caption.length;
-      const hasCTA = /comment|share|follow|save|tag|send|watch/i.test(caption);
-      const hasQuestion = /\?/.test(caption);
-      const hasPowerWord = /secret|shocking|never|truth|insane|viral|pov|watch till/i.test(caption);
-      const signals = [
-        len >= 50 && len <= 150,
-        hasCTA,
-        hasQuestion,
-        hasPowerWord,
-      ].filter(Boolean).length;
-      return signals >= 3 ? 1 : signals >= 2 ? 0.5 : 0;
-    },
-    rationale: (d: VideoData, score: number | null) => {
-      const caption = d.description || d.title;
-      const len = caption?.length ?? 0;
-      if (score === 1)
-        return `Caption (${len} chars) has strong hooks: power words, CTA, or questions. Great for driving engagement from the text overlay.`;
-      if (score === 0.5)
-        return `Caption (${len} chars) has some engagement triggers but missing key elements. Add a CTA, question, or power word.`;
-      return `Caption (${len} chars) is weak — missing power words, CTAs, and questions. Strong captions are 50-150 chars with a clear hook.`;
-    },
-  },
-  {
-    id: "tt-hashtags",
-    label: "Hashtag Strategy",
-    weight: 5,
-    tier: 2,
-    autoAssessable: true,
-    check: (d: VideoData) => {
-      const count = d.tags.length;
-      return count >= 3 && count <= 5
-        ? 1
-        : (count >= 1 && count <= 2) || (count >= 6 && count <= 10)
-          ? 0.5
-          : 0;
-    },
-    rationale: (d: VideoData, score: number | null) => {
-      const count = d.tags.length;
-      if (score === 1)
-        return `${count} hashtags (ideal 3-5). Good balance of discoverability without looking spammy. Mix niche + trending tags.`;
-      if (score === 0.5)
-        return `${count} hashtags. ${count < 3 ? "Too few — add niche-specific tags" : "Slightly many — reduce to 3-5 most relevant"}. TikTok's algorithm uses hashtags for initial distribution.`;
-      return `${count} hashtags. ${count === 0 ? "None — missing a key discovery signal" : "Too many (>10) — dilutes topic signal"}. Use 3-5 focused hashtags: 2 niche + 1-2 trending.`;
-    },
-  },
-  {
-    id: "tt-sound",
-    label: "Sound Strategy",
-    weight: 5,
-    tier: 2,
-    autoAssessable: true,
-    check: (d: VideoData) => {
-      const { soundName } = getTikTok(d);
-      return soundName ? 1 : 0;
-    },
-    rationale: (d: VideoData, score: number | null) => {
-      const { soundName } = getTikTok(d);
-      if (score === 1)
-        return `Sound: "${soundName || "detected"}". Trending sounds boost FYP placement. Videos using popular sounds get up to 5x more distribution.`;
-      return "No sound detected. Adding a trending or relevant sound significantly boosts discoverability on TikTok.";
-    },
-  },
-  {
-    id: "tt-velocity",
-    label: "Engagement Velocity",
-    weight: 5,
-    tier: 2,
-    autoAssessable: true,
-    check: (d: VideoData) => {
-      if (d.views === 0) return 0;
-      const daysOld = Math.max(
-        1,
-        (Date.now() - new Date(d.publishedAt).getTime()) / 86400000
-      );
-      const viewsPerDay = d.views / daysOld;
-      // High velocity thresholds for TikTok (faster platform)
-      return viewsPerDay >= 10000 ? 1 : viewsPerDay >= 1000 ? 0.5 : 0;
-    },
-    rationale: (d: VideoData, score: number | null) => {
-      const daysOld = Math.max(
-        1,
-        (Date.now() - new Date(d.publishedAt).getTime()) / 86400000
-      );
-      const vpd = Math.round(d.views / daysOld);
-      if (score === 1)
-        return `${vpd.toLocaleString()} views/day — strong velocity indicates active FYP distribution.`;
-      if (score === 0.5)
-        return `${vpd.toLocaleString()} views/day — moderate velocity. Content is circulating but not peaking.`;
-      return `${vpd.toLocaleString()} views/day — low velocity. Content may not be getting FYP distribution. Optimize hook and first-second retention.`;
-    },
-  },
-  {
-    id: "tt-profile-visit",
-    label: "Profile Visit Signal",
-    weight: 5,
-    tier: 2,
-    autoAssessable: false,
-    check: () => null,
-    rationale: () =>
-      "Profile visits after viewing signal strong interest. Requires TikTok analytics to assess. A high profile-visit rate means the viewer wants more of your content — a top growth signal.",
-  },
+  // ─── TIER 3: Supporting (17 points) ──────────────────────────────────────
 
-  // ─── TIER 3: Support (15 points) ───
   {
-    id: "tt-duration",
-    label: "Duration Optimization",
+    id: "tt-hook-strength",
+    label: "First 1-2 second hook",
+    weight: 5,
+    tier: 3,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const text = (d.description || d.title || "").toLowerCase();
+      const firstLine = text.split("\n")[0] || text.slice(0, 80);
+      const hasHookPattern = /\d+|\$|%|why|how|secret|truth|stop|never|actually|unpopular|hot take/i.test(firstLine);
+      const hasPatternInterrupt = /wait|stop|look|did you know|watch this/i.test(firstLine);
+      if (hasHookPattern && hasPatternInterrupt) return 1;
+      if (hasHookPattern || hasPatternInterrupt) return 0.75;
+      return 0.25;
+    },
+    rationale: (d: VideoData, _score: number | null) => {
+      const firstLine = (d.description || d.title || "").split("\n")[0]?.slice(0, 80) ?? "";
+      return `First-line text: "${firstLine}". 2026 TikTok algorithm measures drop-off from the first frame. The hook must be visual, textual, or auditory within the first 1-2 seconds. Open with: bold text statement, provocative claim, visual surprise, or a number. Never open with a logo, intro sequence, or "Hey guys."`;
+    },
+  },
+  {
+    id: "tt-niche-consistency",
+    label: "Niche consistency  (follower-first testing)",
     weight: 4,
     tier: 3,
     autoAssessable: true,
     check: (d: VideoData) => {
-      const sec = d.durationSeconds;
-      if (sec >= 15 && sec <= 60) return 1;
-      if ((sec >= 5 && sec < 15) || (sec > 60 && sec <= 180)) return 0.5;
+      const { tags } = getTikTok(d);
+      const hasNicheTag = tags.some(t => /prop|trader|trading|forex|finance|money|funded|challenge|daytrading/i.test(t));
+      if (hasNicheTag && tags.length >= 2 && tags.length <= 5) return 1;
+      if (hasNicheTag) return 0.5;
       return 0;
     },
     rationale: (d: VideoData, score: number | null) => {
-      const sec = d.durationSeconds;
+      const { tags } = getTikTok(d);
       if (score === 1)
-        return `Duration: ${sec}s (optimal 15-60s). This length maximizes completion rate, which is TikTok's primary ranking signal.`;
+        return `${tags.length} tags including niche-specific keywords. Good for 2026's follower-first testing. The algorithm classifies accounts by niche consistency and tests new videos on audiences who engaged with your previous niche content first.`;
       if (score === 0.5)
-        return `Duration: ${sec}s. ${sec < 15 ? "Very short — may not give enough value for saves/shares" : "Long-form (1-3 min) can work for depth content but risks drop-off"}.`;
-      return `Duration: ${sec}s. ${sec < 5 ? "Too short to generate meaningful engagement" : "Over 3 minutes — high risk of viewer drop-off on TikTok. Consider splitting into parts"}.`;
+        return `Partial niche signal. Post consistently within one niche so TikTok's classifier identifies your account cleanly. Faceless channels and niche-consistent accounts benefit most from follower-first testing.`;
+      return `Weak niche signal. Niche inconsistency confuses the classifier and delays wider testing. Pick one primary content pillar and 3-5 related tags that appear on every video.`;
     },
   },
   {
-    id: "tt-frequency",
-    label: "Posting Frequency",
-    weight: 3,
-    tier: 3,
-    autoAssessable: false,
-    check: () => null,
-    rationale: () =>
-      "TikTok rewards consistent posting (1-3x daily during growth, minimum 4x/week maintenance). Requires account-level data to assess.",
-  },
-  {
-    id: "tt-duet-stitch",
-    label: "Duet/Stitch Potential",
-    weight: 3,
-    tier: 3,
-    autoAssessable: false,
-    check: () => null,
-    rationale: () =>
-      "Content that invites duets/stitches gets amplified through collaborative engagement. Hot takes, challenges, and reaction-worthy clips have highest duet potential.",
-  },
-  {
-    id: "tt-caption-content",
-    label: "Content-Caption Alignment",
-    weight: 3,
-    tier: 3,
-    autoAssessable: false,
-    check: () => null,
-    rationale: () =>
-      "Caption should complement (not repeat) the video content. Best captions add context, ask a question, or create a second layer of engagement. Requires video review.",
-  },
-  {
-    id: "tt-vertical",
-    label: "Vertical Format",
-    weight: 2,
+    id: "tt-duration-fit",
+    label: "Duration fits 2026 strategy (20-40s OR 60s+)",
+    weight: 4,
     tier: 3,
     autoAssessable: true,
-    check: () => 1, // TikTok is inherently vertical
-    rationale: () =>
-      "TikTok content is natively vertical (9:16). Auto-pass for TikTok-native uploads.",
+    check: (d: VideoData) => {
+      const dur = d.durationSeconds;
+      if ((dur >= 20 && dur <= 40) || (dur >= 60 && dur <= 180)) return 1;
+      if (dur >= 15 && dur <= 60) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const dur = d.durationSeconds;
+      if (score === 1)
+        return `${dur}s duration fits one of the two optimal 2026 bands: 20-40s for maximum completion rate, or 60-180s for Creator Rewards Program eligibility and higher distribution.`;
+      if (score === 0.5)
+        return `${dur}s, moderate fit. 2026's sweet spots are 20-40s (max completion) or 60-180s (Creator Rewards + longer-form push). 45-55s is the dead zone: too long for max completion, too short for the longer-form boost.`;
+      return `${dur}s, suboptimal duration for 2026. Either cut to 20-30s for completion rate, or extend to 60+ seconds to qualify for the higher payout and longer-form algorithmic push.`;
+    },
+  },
+  {
+    id: "tt-hashtag-restraint",
+    label: "Hashtags — 2 to 5 targeted (no #fyp spam)",
+    weight: 4,
+    tier: 3,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const { tags } = getTikTok(d);
+      const hasGenericSpam = tags.some(t => /^(fyp|foryou|foryoupage|viral|xyz)$/i.test(t));
+      if (hasGenericSpam) return 0;
+      if (tags.length >= 2 && tags.length <= 5) return 1;
+      if (tags.length === 1 || tags.length === 6 || tags.length === 7) return 0.5;
+      return 0.25;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const { tags } = getTikTok(d);
+      if (score === 0 && tags.some(t => /^(fyp|foryou|viral)$/i.test(t)))
+        return `Generic #fyp / #foryou / #viral detected. These are ignored or actively demoted by the 2026 algorithm. Replace with 2-5 niche-specific hashtags.`;
+      if (score === 1)
+        return `${tags.length} targeted hashtags. Optimal. TikTok 2026 uses hashtags as supporting topic signals, not the primary discovery mechanism. 2-5 specific tags are enough.`;
+      return `${tags.length} hashtags. Adjust to 2-5 niche-specific tags. Hashtag stuffing no longer boosts reach; it triggers the spam classifier.`;
+    },
   },
 
-  // ─── TIER 4: Baseline (7 points) ───
+  // ─── TIER 4: Baseline (8 points) ─────────────────────────────────────────
+
   {
-    id: "tt-native-feel",
-    label: "Native Content Feel",
+    id: "tt-first-hour-engagement",
+    label: "First-hour engagement velocity",
+    weight: 3,
+    tier: 4,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot fully assess from post-hoc data. First-hour engagement velocity triggers the expansion decision. Reply to every comment in the first hour to signal active conversation. Post when your audience is most active (TikTok Analytics → Audience → Active Times).",
+  },
+  {
+    id: "tt-not-interested",
+    label: "\"Not interested\" signal (negative feedback)",
+    weight: 3,
+    tier: 4,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot directly measure. The algorithm treats \"Not Interested\" taps and quick scroll-aways as explicit negative feedback and reduces future distribution for similar content patterns. Avoid clickbait thumbnails that violate expectations.",
+  },
+  {
+    id: "tt-usds-transition",
+    label: "Oracle/USDS algorithm transition (2026 context)",
     weight: 2,
     tier: 4,
     autoAssessable: false,
-    check: () => null,
-    rationale: () =>
-      "TikTok's algorithm deprioritizes overly polished, 'ad-like' content. Native feel = phone-shot aesthetic, authentic delivery, no watermarks from other platforms. Requires video review.",
-  },
-  {
-    id: "tt-authority",
-    label: "Creator Authority",
-    weight: 2,
-    tier: 4,
-    autoAssessable: true,
-    check: (d: VideoData) => {
-      const { followers } = getTikTok(d);
-      return followers >= 100000 ? 1 : followers >= 10000 ? 0.5 : 0;
-    },
-    rationale: (d: VideoData, score: number | null) => {
-      const { followers } = getTikTok(d);
-      if (score === 1)
-        return `${followers.toLocaleString()} followers (100K+). Established creator authority — algorithm gives initial distribution boost.`;
-      if (score === 0.5)
-        return `${followers.toLocaleString()} followers (10K+). Growing authority — content quality matters more than follower count on TikTok.`;
-      return `${followers.toLocaleString()} followers (<10K). Smaller account — TikTok still distributes great content regardless of follower count, but the initial push is smaller.`;
-    },
-  },
-  {
-    id: "tt-hashtag-relevance",
-    label: "Hashtag Niche Relevance",
-    weight: 1.5,
-    tier: 4,
-    autoAssessable: true,
-    check: (d: VideoData) => {
-      const nicheTerms = [
-        "trading", "forex", "crypto", "funded", "propfirm", "prop firm",
-        "daytrading", "scalping", "futures", "stocks", "investing",
-        "fundednext", "money", "finance", "wealth",
-      ];
-      const hashtags = d.tags.map((t) => t.toLowerCase());
-      const matches = hashtags.filter((h) =>
-        nicheTerms.some((n) => h.includes(n))
-      ).length;
-      return matches >= 2 ? 1 : matches >= 1 ? 0.5 : 0;
-    },
-    rationale: (d: VideoData, score: number | null) => {
-      if (score === 1)
-        return `Hashtags contain multiple niche-relevant terms (trading/finance/funded). Content is clearly positioned within the trading niche for targeted distribution.`;
-      if (score === 0.5)
-        return `Some niche relevance in hashtags. Add more specific terms like #propfirm, #fundednext, #daytrading for better niche targeting.`;
-      return `No niche-relevant hashtags detected. Add trading/finance-specific tags to reach the right audience on TikTok's FYP.`;
-    },
-  },
-  {
-    id: "tt-caption-length",
-    label: "Caption Length",
-    weight: 1,
-    tier: 4,
-    autoAssessable: true,
-    check: (d: VideoData) => {
-      const len = (d.description || d.title).length;
-      return len >= 50 && len <= 150
-        ? 1
-        : (len >= 20 && len < 50) || (len > 150 && len <= 300)
-          ? 0.5
-          : 0;
-    },
-    rationale: (d: VideoData, score: number | null) => {
-      const len = (d.description || d.title).length;
-      if (score === 1)
-        return `Caption length: ${len} chars (ideal 50-150). Enough to hook but not overwhelm.`;
-      if (score === 0.5)
-        return `Caption length: ${len} chars. ${len < 50 ? "A bit short — add a CTA or question" : "Somewhat long — TikTok captions work best when concise"}.`;
-      return `Caption length: ${len} chars. ${len < 20 ? "Too short to add context" : "Over 300 chars — TikTok truncates long captions. Keep it punchy"}.`;
-    },
-  },
-  {
-    id: "tt-consistency",
-    label: "Posting Consistency",
-    weight: 0.5,
-    tier: 4,
-    autoAssessable: false,
-    check: () => null,
-    rationale: () =>
-      "TikTok's algorithm rewards accounts that post consistently. Irregular posting signals can reduce distribution. Requires account-level data to assess.",
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "US algorithm being retrained on Oracle infrastructure through mid-2026. Expect temporary distribution fluctuations. Maintain consistent posting — creators who pause during retraining recover slower. Focus on fundamentals (watch time, completion, shares) as these signals carry over regardless of operator.",
   },
 ];
