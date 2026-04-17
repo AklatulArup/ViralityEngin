@@ -99,7 +99,8 @@ export function buildReferenceEntry(
       }
     }
 
-    return {
+    // Channel-level summary entry (for creator tracking + niche lookups)
+    const channelEntry: ReferenceEntry = {
       id: h.channel.id,
       type: "channel",
       platform: "youtube",
@@ -119,12 +120,23 @@ export function buildReferenceEntry(
       },
       archetypes: allArchetypes,
     };
+
+    // Per-video entries — every video on the channel becomes reference material
+    // Classifies each as Long-form or Shorts based on duration (<= 60s = Shorts)
+    const videoEntries: ReferenceEntry[] = h.videos.map((v) => {
+      const platform = (v.durationSeconds ?? 0) > 0 && (v.durationSeconds ?? 0) <= 60
+        ? "youtube_short" as const
+        : "youtube" as const;
+      return buildEntryFromVideo(v, platform);
+    });
+
+    return [channelEntry, ...videoEntries];
   }
 
-  // TikTok batch — return entries for top performers
-  const entries: ReferenceEntry[] = result.topPerformers
-    .slice(0, 10)
-    .map((v: EnrichedVideo) => {
+  // TikTok batch — save every fetched video, not just top performers.
+  // This aggressively grows the pool every time you analyse a TikTok creator.
+  const allVideos = result.videos ?? result.topPerformers ?? [];
+  const entries: ReferenceEntry[] = allVideos.map((v: EnrichedVideo) => {
       const archetypes = detectArchetypes(v.title, v.tags);
       const videoFormat = classifyVideoFormat(v.durationSeconds, v.title, v.tags, v.description, "tiktok");
       const { label: sentiment, score: sentimentScore } = quickSentiment(

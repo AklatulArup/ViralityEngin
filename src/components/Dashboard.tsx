@@ -22,6 +22,7 @@ import type {
   AnalysisResult,
   VideoAnalysis,
   ReferenceStore,
+  ReferenceEntry,
   TikTokBatchAnalysis,
   KeywordBank,
   AdjacentVideoContext,
@@ -52,6 +53,7 @@ import {
 import { computeDeepAnalysis } from "@/lib/deep-analysis";
 import {
   buildReferenceEntry,
+  buildEntryFromVideo,
   findRelatedEntries,
 } from "@/lib/reference-store";
 import { expandKeywordBank } from "@/lib/keyword-bank";
@@ -464,14 +466,14 @@ export default function Dashboard() {
           expandBank(v.title, v.description, v.tags);
         }
 
-        // Save to reference store
+        // Save to reference store — send ALL entries (channel summary + every video)
         const entryOrEntries = buildReferenceEntry(channelResult);
-        const entry = Array.isArray(entryOrEntries) ? entryOrEntries[0] : entryOrEntries;
-        if (entry) {
+        const entriesArray = Array.isArray(entryOrEntries) ? entryOrEntries : [entryOrEntries];
+        if (entriesArray.length > 0) {
           fetch("/api/reference-store", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(entry),
+            body: JSON.stringify(entriesArray),
           })
             .then((r) => r.json())
             .then((res) => {
@@ -653,14 +655,49 @@ export default function Dashboard() {
         // Expand keyword bank
         expandBank(videoData.title, videoData.description, videoData.tags);
 
-        // Save to reference store
+        // Save to reference store — the analysed video + every sibling we pulled
+        // from the channel, plus a channel summary so creator tracking works
         const vidEntryOrEntries = buildReferenceEntry(videoResult);
-        const vidEntry = Array.isArray(vidEntryOrEntries) ? vidEntryOrEntries[0] : vidEntryOrEntries;
-        if (vidEntry) {
+        const primaryEntries = Array.isArray(vidEntryOrEntries) ? vidEntryOrEntries : [vidEntryOrEntries];
+        const siblingEntries = enrichedRecent
+          .filter((v) => v.id !== enrichedVideo.id)
+          .map((v) => {
+            const plat = (v.durationSeconds ?? 0) > 0 && (v.durationSeconds ?? 0) <= 60
+              ? "youtube_short" as const
+              : "youtube" as const;
+            return buildEntryFromVideo(v, plat);
+          });
+
+        let channelSummaryEntry: ReferenceEntry | null = null;
+        if (channelData) {
+          channelSummaryEntry = {
+            id: channelData.id,
+            type: "channel",
+            platform: "youtube",
+            name: channelData.name,
+            channelId: channelData.id,
+            channelName: channelData.name,
+            analyzedAt: new Date().toISOString(),
+            metrics: {
+              subs: channelData.subs,
+              medianViews: channelMedian,
+              videoCount: enrichedRecent.length,
+            },
+            archetypes: [],
+          };
+        }
+
+        const allEntries = [
+          ...primaryEntries,
+          ...(channelSummaryEntry ? [channelSummaryEntry] : []),
+          ...siblingEntries,
+        ];
+
+        if (allEntries.length > 0) {
           fetch("/api/reference-store", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(vidEntry),
+            body: JSON.stringify(allEntries),
           })
             .then((r) => r.json())
             .then((res) => {
@@ -811,6 +848,20 @@ export default function Dashboard() {
           setResult(igBatch);
           setLanguageCPA(computeLanguageCPA(enrichedIG));
         }
+
+        // Save all Instagram posts to the reference pool — aggressive growth
+        const igEntries: ReferenceEntry[] = enrichedIG.map((v) => buildEntryFromVideo(v, "instagram"));
+        if (igEntries.length > 0) {
+          fetch("/api/reference-store", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(igEntries),
+          })
+            .then((r) => r.json())
+            .then(() => { setRefStoreStatus("saved"); refreshReferenceStore(); })
+            .catch(() => {});
+        }
+
         setStatus("");
 
       } else if (parsed.type === "x") {
@@ -832,6 +883,23 @@ export default function Dashboard() {
         const xPosts = xData.posts;
         if (!xPosts || xPosts.length === 0) throw new Error("No X posts returned. The account may be private or rate-limited.");
         setResult({ type: "x-batch", posts: xPosts } as unknown as AnalysisResult);
+
+        // Save all X posts to the reference pool — aggressive growth
+        const xEntries: ReferenceEntry[] = xPosts.map((p: import("@/lib/types").XPostData) => {
+          const enriched = xPostToEnrichedVideo(p, xPosts);
+          return buildEntryFromVideo(enriched, "x");
+        });
+        if (xEntries.length > 0) {
+          fetch("/api/reference-store", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(xEntries),
+          })
+            .then((r) => r.json())
+            .then(() => { setRefStoreStatus("saved"); refreshReferenceStore(); })
+            .catch(() => {});
+        }
+
         setStatus("");
 
       } else if (parsed.type === "unknown") {
@@ -1863,13 +1931,26 @@ export default function Dashboard() {
                   ] as const;
 
                   // Count current entries per platform (referenceStore refreshes after every analysis)
-                  const counts: Record<string, number> = {};
-                  for (const t of TIERS) counts[t.key] = 0;
+                  const counts:   Record<string, number>      = {};
+                  const creators: Record<string, Set<string>> = {};
+                  for (const t of TIERS) { counts[t.key] = 0; creators[t.key] = new Set(); }
                   if (referenceStore?.entries) {
                     for (const e of referenceStore.entries) {
-                      if (e.platform && counts[e.platform] !== undefined) counts[e.platform]++;
+                      if (e.platform && counts[e.platform] !== undefined) {
+                        counts[e.platform]++;
+                        // Use channelId first, fall back to channelName, skip if neither
+                        const creatorKey = e.channelId || e.channelName || "";
+                        if (creatorKey) creators[e.platform].add(creatorKey);
+                      }
                     }
                   }
+
+                  // Unique creators across all platforms (same channel may post on multiple)
+                  const allCreators = new Set<string>();
+                  for (const platformSet of Object.values(creators)) {
+                    for (const c of platformSet) allCreators.add(c);
+                  }
+                  const grandCreators = allCreators.size;
 
                   // Grand totals
                   const grand = TIERS.reduce(
@@ -1913,6 +1994,13 @@ export default function Dashboard() {
                                 {grand.current.toLocaleString()}
                               </span>
                               <span className="font-mono" style={{ fontSize: 11, color: "#5E5A57" }}>items</span>
+                              {grandCreators > 0 && (
+                                <>
+                                  <span className="font-mono" style={{ fontSize: 11, color: "#3A3835", marginLeft: 4 }}>·</span>
+                                  <span className="font-mono" style={{ fontSize: 13, color: "#B8B6B1", fontWeight: 500 }}>{grandCreators.toLocaleString()}</span>
+                                  <span className="font-mono" style={{ fontSize: 11, color: "#5E5A57" }}>creators</span>
+                                </>
+                              )}
                             </div>
                           </div>
                           <div className="text-right">
@@ -1994,7 +2082,14 @@ export default function Dashboard() {
                                   <span className="font-mono" style={{ fontSize: 10, color: "#B8B6B1", fontWeight: 500 }}>{t.short}</span>
                                   <span className="font-mono" style={{ fontSize: 9, color: "#5E5A57" }}>{t.label}</span>
                                 </div>
-                                <span className="font-mono font-bold" style={{ fontSize: 12, color: "#E8E6E1" }}>{c.toLocaleString()}</span>
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className="font-mono font-bold" style={{ fontSize: 12, color: "#E8E6E1" }}>{c.toLocaleString()}</span>
+                                  {creators[t.key].size > 0 && (
+                                    <span className="font-mono" style={{ fontSize: 9, color: "#5E5A57" }}>
+                                      · {creators[t.key].size} {creators[t.key].size === 1 ? "creator" : "creators"}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
 
                               {/* 3-segment progress bar: each tier fills its own segment */}
