@@ -15,7 +15,7 @@ import { classifyVideoFormat, classifyOrientation, formatDuration, quickSentimen
  */
 export function buildEntryFromVideo(
   v: VideoData,
-  platform: "youtube" | "tiktok" = "youtube"
+  platform: "youtube" | "youtube_short" | "tiktok" | "instagram" | "x" = "youtube"
 ): ReferenceEntry {
   const now = new Date().toISOString();
   const archetypes = detectArchetypes(v.title, v.tags);
@@ -164,7 +164,7 @@ export function buildReferenceEntry(
 export function findRelatedEntries(
   store: ReferenceStore,
   channelId: string,
-  platform?: "youtube" | "tiktok"
+  platform?: "youtube" | "youtube_short" | "tiktok" | "instagram" | "x"
 ): ReferenceEntry[] {
   return store.entries.filter(
     (e) =>

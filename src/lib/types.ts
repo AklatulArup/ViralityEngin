@@ -34,7 +34,7 @@ export interface VideoData {
   thumbnail: string;
   tags: string[];
   description: string;
-  platform?: "youtube" | "youtube_short" | "tiktok" | "instagram";
+  platform?: "youtube" | "youtube_short" | "tiktok" | "instagram" | "x";
   shares?: number;
   saves?: number;
   channelContext?: ChannelContext;
@@ -313,7 +313,7 @@ export type SentimentLabel = "positive" | "neutral" | "negative";
 export interface ReferenceEntry {
   id: string;
   type: "channel" | "video";
-  platform?: "youtube" | "youtube_short" | "tiktok" | "instagram";
+  platform?: "youtube" | "youtube_short" | "tiktok" | "instagram" | "x";
   name: string;
   channelId: string;
   channelName: string;
@@ -640,4 +640,35 @@ export interface NicheRanking {
     videoCount: number;
     rank: number;
   }[];
+}
+
+// ─── X (Twitter) Post Data ────────────────────────────────────────────────────
+
+export interface XPostData {
+  id: string;
+  text: string;
+  authorHandle: string;
+  authorName: string;
+  authorFollowers: number;
+  authorVerified?: boolean;
+  views: number;
+  likes: number;
+  reposts: number;
+  replies: number;
+  quotes: number;
+  bookmarks: number;
+  publishedAt: string;
+  hasVideo: boolean;
+  hasImage: boolean;
+  hasLink: boolean;
+  hashtags: string[];
+  isThread: boolean;
+  threadPosition?: number;
+  platform: "x";
+  url?: string;
+  engagementScore: number;
+  replyRate: number;
+  bookmarkRate: number;
+  repostRate: number;
+  quoteRate: number;
 }

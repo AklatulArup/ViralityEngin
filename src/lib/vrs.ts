@@ -11,6 +11,7 @@ import { YT_LONGFORM_CRITERIA } from "./vrs-criteria";
 import { TT_CRITERIA }          from "./trs-criteria";
 import { IG_CRITERIA }          from "./ig-criteria";
 import { YT_SHORTS_CRITERIA }   from "./yts-criteria";
+import { X_CRITERIA }           from "./x-criteria";
 
 const TIER_LABELS: Record<VRSTier, string> = {
   1: "CRITICAL",
@@ -28,6 +29,8 @@ export function getCriteriaForPlatform(platform?: string): VRSCriterion[] {
     case "tiktok":       return TT_CRITERIA;
     case "instagram":    return IG_CRITERIA;
     case "youtube_short": return YT_SHORTS_CRITERIA;
+    case "x":
+    case "twitter":      return X_CRITERIA;
     case "youtube":
     default:             return YT_LONGFORM_CRITERIA;
   }
@@ -38,6 +41,8 @@ export function getPlatformLabel(platform?: string): string {
     case "tiktok":        return "TikTok";
     case "instagram":     return "Instagram Reels";
     case "youtube_short": return "YouTube Shorts";
+    case "x":
+    case "twitter":       return "X (Twitter)";
     default:              return "YouTube Long-Form";
   }
 }

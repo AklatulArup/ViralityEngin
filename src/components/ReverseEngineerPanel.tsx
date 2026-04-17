@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { AnalysisResult, ChannelData, EnrichedVideo } from "@/lib/types";
 
-type Platform = "youtube" | "youtube_short" | "tiktok" | "instagram";
+type Platform = "youtube" | "youtube_short" | "tiktok" | "instagram" | "x";
 type TargetPlatform = "youtube" | "youtube_short" | "tiktok" | "instagram";
 
 interface ReverseEngineerPanelProps {

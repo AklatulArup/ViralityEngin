@@ -72,6 +72,7 @@ import VideoResult from "./VideoResult";
 import ChannelResult from "./ChannelResult";
 import CsvUpload from "./CsvUpload";
 import TikTokBatchResult from "./TikTokBatchResult";
+import XBatchResult from "./XBatchResult";
 import ReferenceSearch from "./ReferenceSearch";
 import ReferenceUpload from "./ReferenceUpload";
 import ReferencePoolBuilder from "./ReferencePoolBuilder";
@@ -90,7 +91,7 @@ import StarfieldCanvas from "./StarfieldCanvas";
 import CursorGlow from "./CursorGlow";
 import MetricCard from "./MetricCard";
 
-type InputTab = "youtube" | "youtube_short" | "tiktok" | "instagram";
+type InputTab = "youtube" | "youtube_short" | "tiktok" | "instagram" | "x";
 
 function enrichVideo(
   v: VideoData,
@@ -139,6 +140,7 @@ export default function Dashboard() {
   const [instagramInput, setInstagramInput] = useState("");
   const [instagramStatus, setInstagramStatus] = useState("");
   const [tiktokInputVal, setTiktokInputVal] = useState("");
+  const [xInput, setXInput] = useState("");
   const [youtubeShortInput, setYoutubeShortInput] = useState("");
   const [activePanel, setActivePanel] = useState<"libraries" | "ref-tools" | "reverse-engineer" | "bulk-import" | "calendar" | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -811,10 +813,31 @@ export default function Dashboard() {
         }
         setStatus("");
 
+      } else if (parsed.type === "x") {
+        setStatus(`Scraping X${parsed.handle ? ` @${parsed.handle}` : ""}...`);
+        const xRes = await fetch("/api/x/scrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url:    parsed.url,
+            handle: parsed.handle,
+            limit:  30,
+          }),
+        });
+        if (!xRes.ok) {
+          const err = await xRes.json().catch(() => ({ error: "Unknown error" }));
+          throw new Error(err.error || "X scrape failed. Ensure APIFY_TOKEN is set in Vercel env vars.");
+        }
+        const xData = await xRes.json();
+        const xPosts = xData.posts;
+        if (!xPosts || xPosts.length === 0) throw new Error("No X posts returned. The account may be private or rate-limited.");
+        setResult({ type: "x-batch", posts: xPosts } as unknown as AnalysisResult);
+        setStatus("");
+
       } else if (parsed.type === "unknown") {
-        throw new Error("Could not detect input type. Paste a YouTube, TikTok, or Instagram URL / @handle.");
+        throw new Error("Could not detect input type. Paste a YouTube, TikTok, Instagram, or X URL / @handle.");
       } else {
-        throw new Error(`${parsed.label} — paste a YouTube, TikTok, or Instagram URL.`);
+        throw new Error(`${parsed.label} — paste a YouTube, TikTok, Instagram, or X URL.`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -859,9 +882,12 @@ export default function Dashboard() {
     { id: "instagram"     as InputTab, label: "Instagram",   short: "IGR", color: "#E1306C", icon: (
       <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="20" height="20" rx="5.5" ry="5.5" fillOpacity=".2" stroke="currentColor" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" fill="none"/><circle cx="18" cy="6" r="1.2"/></svg>
     ) },
+    { id: "x"             as InputTab, label: "X (Twitter)", short: "X·T", color: "#9CA3AF", icon: (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>
+    ) },
   ] as const;
 
-  const activePlatform = PLATFORMS.find(p => p.id === inputTab)!;
+  const activePlatform = PLATFORMS.find(p => p.id === inputTab) ?? PLATFORMS[0];
 
   return (
     <div className="flex min-h-screen" style={{ background: "#000000", color: "#E8E6E1", position: "relative" }}>
@@ -1312,6 +1338,45 @@ export default function Dashboard() {
                 >
                   Queue
                 </button>
+            </div>
+          )}
+
+          {inputTab === "x" && (
+            <div className="flex-1 flex gap-2.5 items-center">
+              <div
+                className="flex-1 flex items-center gap-3 rounded-xl overflow-hidden"
+                style={{ height: 44, padding: "0 14px", background: "rgba(4,4,2,0.90)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.12)" }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="#9CA3AF" style={{ flexShrink: 0, opacity: 0.8 }}>
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
+                </svg>
+                <input
+                  type="text"
+                  value={xInput}
+                  onChange={e => setXInput(e.target.value)}
+                  placeholder="@handle or x.com/user/status/… (requires APIFY_TOKEN)"
+                  className="flex-1 bg-transparent border-none outline-none"
+                  style={{ fontSize: 13, color: "#E8E6E1", caretColor: "#9CA3AF" }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && xInput.trim()) {
+                      const v = xInput.trim();
+                      analyze(v.includes("x.com") || v.includes("twitter.com") ? v : `https://x.com/${v.replace(/^@/, "")}`);
+                    }
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => { const v = xInput.trim(); if (!v) return; analyze(v.includes("x.com") || v.includes("twitter.com") ? v : `https://x.com/${v.replace(/^@/, "")}`); }}
+                disabled={loading || !xInput.trim()}
+                className="shrink-0 flex items-center gap-2 font-semibold rounded-xl"
+                style={{ height: 44, padding: "0 22px", fontSize: 13, cursor: loading || !xInput.trim() ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, transition: "all 0.2s",
+                  background: xInput.trim() ? "linear-gradient(135deg,#374151,#6B7280)" : "rgba(255,255,255,0.06)",
+                  color: xInput.trim() ? "#fff" : "#4A4845",
+                  border: xInput.trim() ? "1px solid rgba(156,163,175,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: xInput.trim() ? "0 0 20px rgba(156,163,175,0.3)" : "none" }}
+              >
+                {loading ? <span className="orbital-loader" style={{ borderTopColor: "#9CA3AF" }} /> : "Analyze"}
+              </button>
             </div>
           )}
 
@@ -2102,6 +2167,37 @@ export default function Dashboard() {
               />
             </div>
           )}
+
+          {/* ── X (Twitter) batch ── */}
+          {!loading && (result as unknown as { type?: string })?.type === "x-batch" && (() => {
+            const xr = result as unknown as { posts: Array<{id:string;text:string;authorHandle:string;authorName:string;authorFollowers:number;views:number;likes:number;reposts:number;replies:number;quotes:number;bookmarks:number;publishedAt:string;hasLink:boolean;isThread:boolean;hasVideo:boolean;hasImage:boolean;hashtags:string[];url:string;engagementScore:number;replyRate:number;bookmarkRate:number;repostRate:number;quoteRate:number;platform:"x"}> };
+            const posts = xr.posts;
+            const totalViews   = posts.reduce((s, p) => s + p.views, 0);
+            const avgReplies   = Math.round(posts.reduce((s, p) => s + p.replies, 0) / Math.max(posts.length, 1));
+            const hasLinkCount = posts.filter(p => p.hasLink).length;
+            return (
+              <div className="space-y-5" style={{ paddingTop: 4 }}>
+                <div className="grid gap-3 fade-up" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", marginBottom: 8 }}>
+                  {[
+                    { label: "Posts",        value: posts.length.toString(),          color: "#9CA3AF", tip: "Posts analysed" },
+                    { label: "Total Views",  value: formatNumber(totalViews),          color: "#60A5FA", tip: "Combined impressions" },
+                    { label: "Avg Replies",  value: avgReplies.toString(),             color: "#A78BFA", tip: "Replies = 27x a like" },
+                    { label: "Links in body",value: `${hasLinkCount}/${posts.length}`, color: hasLinkCount > 0 ? "#FF4D6A" : "#2ECC8A", tip: "Links hurt reach on X" },
+                    { label: "Creator",      value: `@${posts[0]?.authorHandle ?? ""}`, color: "#9CA3AF", tip: "Handle" },
+                  ].map((m, i) => <MetricCard key={m.label} {...m} index={i} />)}
+                </div>
+                {hasLinkCount > 0 && (
+                  <div className="fade-up-1" style={{ background: "rgba(255,77,106,0.06)", border: "0.5px solid rgba(255,77,106,0.2)", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#FF7B7B" }}>
+                    ⚠️ {hasLinkCount} post{hasLinkCount > 1 ? "s have" : " has"} an external link in the post body.
+                    X applies a −75 score penalty (≈ −150 effective likes worth of reach) for links in the main post. Move links to the first reply.
+                  </div>
+                )}
+                <div className="fade-up-2">
+                  <XBatchResult posts={posts} />
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── TikTok / Instagram batch ── */}
           {!loading && result?.type === "tiktok-batch" && (() => {
