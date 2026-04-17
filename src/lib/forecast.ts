@@ -54,6 +54,9 @@ export interface ForecastInput {
   // Optional: combined seasonality multiplier (day-of-week + market volatility)
   seasonalityMultiplier?: number;
   seasonalityRationales?: string[];
+  // Optional: comment sentiment score 0-100 (100 = overwhelmingly positive)
+  sentimentScore?: number;
+  sentimentRationale?: string;
 }
 
 export interface VelocitySampleInput {
@@ -765,10 +768,22 @@ export function forecast(input: ForecastInput): Forecast {
   // the creator's effective median before the score multiplier range is applied.
   const seasonality = input.seasonalityMultiplier ?? 1.0;
   const adjustedBaseline = baseline.median * seasonality;
+
+  // Comment sentiment adjusts the UPSIDE specifically — positive sentiment
+  // widens the high band (algorithm promotes), negative sentiment compresses it.
+  // Does not change the median much — sentiment affects reach ceiling, not floor.
+  const sentScore = input.sentimentScore;
+  let sentimentUpside = 1.0;
+  if (typeof sentScore === "number") {
+    // Map 0-100 score to 0.7-1.35 upside multiplier
+    // 50 = neutral (1.0), 80 = +20% upside, 90+ = +30%, 25 = -15%, <10 = -30%
+    sentimentUpside = 0.7 + (sentScore / 100) * 0.65;
+  }
+
   const prior = {
     low:    Math.round(adjustedBaseline * adjMult.low),
     median: Math.round(adjustedBaseline * adjMult.median),
-    high:   Math.round(adjustedBaseline * adjMult.high),
+    high:   Math.round(adjustedBaseline * adjMult.high * sentimentUpside),
   };
 
   // ── Step 6: Blend with observed trajectory ───────────────────────────
@@ -806,6 +821,9 @@ export function forecast(input: ForecastInput): Forecast {
     if (input.seasonalityRationales) {
       for (const r of input.seasonalityRationales) notes.push(`  · ${r}`);
     }
+  }
+  if (typeof input.sentimentScore === "number") {
+    notes.push(`Comment sentiment: ${input.sentimentScore}/100. ${input.sentimentRationale ?? ""}`);
   }
   if (trajectory) {
     notes.push(`Trajectory blend weight: ${(trajectory.blendWeight * 100).toFixed(0)}% observed vs ${((1-trajectory.blendWeight) * 100).toFixed(0)}% prior.`);

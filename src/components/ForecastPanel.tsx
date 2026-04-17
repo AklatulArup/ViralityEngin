@@ -44,6 +44,37 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
     fetchMarketVolatility().then(setMarketVol).catch(() => {});
   }, []);
 
+  // Comment sentiment (YouTube only for now — other platforms lack public comment APIs)
+  const [sentimentScore, setSentimentScore] = useState<number | undefined>(undefined);
+  const [sentimentRationale, setSentimentRationale] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (platform !== "youtube" && platform !== "youtube_short") return;
+    if (!video.id) return;
+
+    // Fetch comments, then sentiment
+    (async () => {
+      try {
+        const cRes = await fetch(`/api/youtube/comments?videoId=${encodeURIComponent(video.id)}&max=20`);
+        if (!cRes.ok) return;
+        const cData = await cRes.json();
+        if (!cData?.ok || !Array.isArray(cData.comments) || cData.comments.length === 0) return;
+
+        const sRes = await fetch("/api/forecast/sentiment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comments: cData.comments }),
+        });
+        if (!sRes.ok) return;
+        const sData = await sRes.json();
+        if (sData?.ok && sData.result) {
+          setSentimentScore(sData.result.score);
+          setSentimentRationale(sData.result.rationale);
+        }
+      } catch { /* silent fail */ }
+    })();
+  }, [video.id, platform]);
+
   // Combine into single multiplier
   const seasonality = useMemo(
     () => combineSeasonality({ dayOfWeek: dowProfile, marketVolatility: marketVol }),
