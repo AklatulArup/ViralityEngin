@@ -1,0 +1,233 @@
+import type { VideoData, VRSCriterion } from "./types";
+
+// YouTube Shorts Readiness Score (SRS): 20 criteria, 100 points total
+// Formula: (V_vs×0.50) + (R_loop×0.30) + (External_shares×0.20)
+// No 48-hour virality cap in 2026. Frame 1 IS the thumbnail.
+
+export const YT_SHORTS_CRITERIA: VRSCriterion[] = [
+  // ─── TIER 1: Critical (50 points) ───
+
+  {
+    id: "yts-frame1",
+    label: "Frame 1 Pattern Interrupt (V_vs Gate)",
+    weight: 18,
+    tier: 1,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot assess from metadata alone. Frame 1 IS the thumbnail for YouTube Shorts — there is no separate thumbnail. The viewed-vs-swiped (V_vs) ratio is the single highest-weighted signal across ALL four major platforms at 50% of the Shorts formula. Kill threshold: >30% swipe-away = PERMANENT burial with no recovery. The first frame must be a visual pattern interrupt — most striking visual available (payout number, chart spike, funded certificate). Zero intros, logos, or slow zooms.",
+  },
+  {
+    id: "yts-completion",
+    label: "Completion Rate (≥70% gate)",
+    weight: 15,
+    tier: 1,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const dur = d.durationSeconds;
+      const eng = d.engagement / 100;
+      // Short videos with high engagement = high completion proxy
+      const isShort = dur <= 60;
+      const isExpandedShort = dur <= 180;
+      if (isShort && eng >= 0.05) return 1;
+      if (isShort && eng >= 0.03) return 0.75;
+      if (isExpandedShort && eng >= 0.05) return 0.75;
+      if (isExpandedShort && eng >= 0.03) return 0.5;
+      return 0.25;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const dur = d.durationSeconds;
+      const durStr = `${dur}s`;
+      const eng = d.engagement.toFixed(1);
+      if (score === 1 || (score !== null && score >= 0.75))
+        return `${durStr} duration + ${eng}% engagement → strong completion proxy. YouTube Shorts needs ≥70% completion to pass Step 1 distribution. Short duration (≤60s) makes completion mechanically easier. High engagement at this length indicates the content holds attention through to the end.`;
+      if (score !== null && score >= 0.5)
+        return `${durStr} duration + ${eng}% engagement → moderate completion. For Shorts: shorter = easier to complete. 15–30 seconds is the sweet spot for maximising completion rate. At ${dur}s, every second of padding costs completion rate.`;
+      return `${durStr} duration + ${eng}% engagement → weak completion signal. Completion is the primary driver of Shorts distribution after the V_vs swipe gate. Reduce duration to 15–30 seconds. Remove any moment where attention could drop — no padded intros, no slow buildups.`;
+    },
+  },
+  {
+    id: "yts-no-watermark",
+    label: "No Third-Party Watermark",
+    weight: 10,
+    tier: 1,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot assess from metadata. YouTube runs fingerprinting detection on every upload. TikTok or CapCut watermarks = immediate demotion from Shorts feed distribution. This is permanent — the video will not recover. Always export a clean file from editing software before uploading. Never save from TikTok and re-upload to YouTube.",
+  },
+  {
+    id: "yts-loop-rate",
+    label: "Loop / Rewatch Rate (Natural Loop Design)",
+    weight: 7,
+    tier: 1,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot assess from metadata alone. YouTube Shorts' algorithm specifically identifies 'natural loops' — videos where the last frame flows seamlessly back to the first frame without an obvious ending. Loop rate is the #2 signal (30% weight) after V_vs. Design principle: no 'thanks for watching,' no fade-out, no outro music. Cut directly back to the opening frame. One viewer watching 3× is worth 3 viewers watching once in the algorithm's session-value calculation.",
+  },
+
+  // ─── TIER 2: Strong Signals (30 points) ───
+
+  {
+    id: "yts-external-share",
+    label: "External Share Rate (WhatsApp/Discord)",
+    weight: 12,
+    tier: 2,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const shareRate = (d.shares ?? 0) / Math.max(1, d.views) * 100;
+      if (shareRate >= 0.5) return 1;
+      if (shareRate >= 0.1) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const shareRate = ((d.shares ?? 0) / Math.max(1, d.views) * 100).toFixed(3);
+      if (score === 1)
+        return `Share rate ${shareRate}% → strong. External shares (WhatsApp, iMessage, Discord, Telegram) carry more algorithmic weight on YouTube Shorts than on any other platform. YouTube specifically tracks off-platform sharing as proof of genuine value. This content is being forwarded outside YouTube — the strongest signal in the Shorts formula after V_vs.`;
+      if (score === 0.5)
+        return `Share rate ${shareRate}% → moderate external sharing. To amplify: immediately after posting, share the link directly to a trading Discord or WhatsApp group. Even 5–10 genuine external shares in the first 90 minutes makes a measurable difference to the algorithm's Step 1 assessment.`;
+      return `Share rate ${shareRate}% → weak external sharing. External shares are the #3 signal (20%) and unique to Shorts in their high weighting. Include a specific "Share this to your [trading group/Discord]" CTA. Name the destination — "your trading group" outperforms generic "share this."`;
+    },
+  },
+  {
+    id: "yts-no-time-cap",
+    label: "Evergreen Potential (No 48hr Cap in 2026)",
+    weight: 8,
+    tier: 2,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      // Evergreen Shorts: informational + SEO signals in title/tags
+      const title = (d.title ?? "").toLowerCase();
+      const hasSEOValue = /how|why|what|best|tips|guide|rules|explained|tutorial|review/i.test(d.title ?? "");
+      const hasNumber = /\d/.test(title.slice(0, 20));
+      if (hasSEOValue && hasNumber) return 1;
+      if (hasSEOValue || hasNumber) return 0.5;
+      return 0.25;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const hasSEO = /how|why|what|best|tips|guide|rules|explained/i.test(d.title ?? "");
+      if (score === 1)
+        return `Title "${d.title}" has strong SEO signals — YouTube Shorts removed the 48-hour virality cap in 2026. A Short with search-optimised title can continue receiving views for weeks through YouTube search (which treats Shorts titles like Long-Form titles for indexing). This content has compound growth potential.`;
+      if (score !== null && score >= 0.5)
+        return `Title has some SEO value. YouTube indexes Shorts titles for search. Including specific keywords people would search ("how to pass fundednext challenge") creates a search-driven view stream that persists long after the initial distribution phase.`;
+      return `Title has limited SEO potential. In 2026 with no time cap, a search-optimised Shorts title creates an evergreen view stream. Add a searchable keyword phrase to the title to unlock the search distribution surface alongside the Shorts feed.`;
+    },
+  },
+  {
+    id: "yts-longform-bridge",
+    label: "Long-Form Bridge (Shorts → Long-Form Click)",
+    weight: 5,
+    tier: 2,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot assess from metadata. The most powerful compound signal on YouTube Shorts: viewers clicking through to your long-form channel. This bridges two separate algorithmic surfaces simultaneously — Shorts feed distribution AND Long-Form browse/suggested. Include end-card CTA: 'Full breakdown in my latest video — link in description.' YouTube tracks Shorts-to-LF click-throughs as a high-value session contribution signal.",
+  },
+  {
+    id: "yts-subscribe",
+    label: "Subscribe Signal (Series Context Only)",
+    weight: 5,
+    tier: 2,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot assess from metadata. Subscribe CTAs on Shorts only work in a Day N series context — where the viewer has a clear reason to follow for the next episode. Generic subscribe CTAs placed before the last 5 seconds hurt completion rate (signals 'video is ending' to viewer). Only use in a challenge series with explicit episode continuity.",
+  },
+
+  // ─── TIER 3: Supporting Signals (15 points) ───
+
+  {
+    id: "yts-duration",
+    label: "Optimal Duration (15–30s sweet spot)",
+    weight: 6,
+    tier: 3,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const dur = d.durationSeconds;
+      if (dur >= 15 && dur <= 30) return 1;
+      if (dur >= 10 && dur <= 60) return 0.75;
+      if (dur <= 180) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const dur = d.durationSeconds;
+      if (score === 1)
+        return `${dur}s → optimal. 15–30 seconds maximises completion rate (easier to watch through) while providing enough time for a compelling narrative. This range consistently shows the highest completion-to-duration efficiency ratio in Shorts analytics data.`;
+      if (score !== null && score >= 0.75)
+        return `${dur}s → good. Within the workable Shorts range. Completion becomes mechanically harder with each additional second — every second of padding costs completion rate. Consider whether anything can be cut.`;
+      return `${dur}s → outside optimal range. ${dur > 60 ? "Videos over 60s face higher completion hurdles in the Shorts feed. Consider whether this should be a Long-Form video instead." : "Under 15s may not provide enough context for trading content. Test with 20–25s as the floor."}`;
+    },
+  },
+  {
+    id: "yts-seo-title",
+    label: "SEO-Optimised Title",
+    weight: 5,
+    tier: 3,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const title = d.title ?? "";
+      const len = title.length;
+      const hasKeyword = /how|why|what|best|tips|guide|rules|explained|tutorial|fundednext|prop|funded|trader|trading/i.test(title);
+      const goodLength = len >= 30 && len <= 70;
+      if (hasKeyword && goodLength) return 1;
+      if (hasKeyword || goodLength) return 0.5;
+      return 0.25;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const len = (d.title ?? "").length;
+      if (score === 1)
+        return `Title "${d.title}" (${len} chars) → SEO-optimised. YouTube indexes Shorts titles for search. A strong title creates search-driven views that compound indefinitely. The title is also the primary signal for Shorts-to-LF suggested placement.`;
+      if (score !== null && score >= 0.5)
+        return `Title has partial SEO value. Include the exact search phrase a trader would type: "how to pass fundednext", "prop firm challenge tips", "funded trader rules." Say this phrase aloud in the first 5 seconds for dual indexing (audio NLP + title metadata).`;
+      return `Title needs SEO optimisation. YouTube Shorts titles are indexed like Long-Form titles for search. A search-optimised title creates a second distribution surface (search) beyond the Shorts feed — without this, the video depends entirely on algorithmic feed distribution.`;
+    },
+  },
+  {
+    id: "yts-hashtags",
+    label: "#Shorts Hashtag Classification",
+    weight: 4,
+    tier: 3,
+    autoAssessable: true,
+    check: (d: VideoData) => {
+      const tags = d.tags ?? [];
+      const title = d.title ?? "";
+      const hasShorts = /shorts?/i.test(title) || tags.some(t => /shorts?/i.test(t));
+      const hasNiche = tags.some(t => /trading|forex|prop|funded|trader/i.test(t));
+      if (hasShorts && hasNiche) return 1;
+      if (hasShorts || hasNiche) return 0.5;
+      return 0;
+    },
+    rationale: (d: VideoData, score: number | null) => {
+      const hasShorts = /shorts?/i.test(d.title ?? "") || (d.tags ?? []).some((t: string) => /shorts?/i.test(t));
+      if (score === 1)
+        return `#Shorts classification + niche hashtags detected → optimal. YouTube uses #Shorts for Shorts feed classification and niche hashtags for interest matching. Both are needed for full distribution coverage.`;
+      if (score !== null && score >= 0.5)
+        return `Partial hashtag coverage. Include #Shorts (or #YouTubeShorts) for feed classification AND 2–3 niche hashtags (#proptrading, #fundedtrader, #forextrading) for interest-matched distribution.`;
+      return `Missing #Shorts classification. Without #Shorts in title or description, YouTube may not classify the video for Shorts feed distribution. Add #Shorts to the title or first line of description.`;
+    },
+  },
+
+  // ─── TIER 4: Baseline Signals (5 points) ───
+
+  {
+    id: "yts-post-timing",
+    label: "Post Timing (External Share Window)",
+    weight: 3,
+    tier: 4,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot assess from metadata. Unlike TikTok (follower-peak dependent), YouTube Shorts timing is less critical for the initial distribution window. However: share the link to WhatsApp/Discord IMMEDIATELY after posting to seed the external share signal within the first 90 minutes of the Step 1 test.",
+  },
+  {
+    id: "yts-pinned-comment",
+    label: "Pinned Comment (CTA + Keywords)",
+    weight: 2,
+    tier: 4,
+    autoAssessable: false,
+    check: (_d: VideoData) => null,
+    rationale: (_d: VideoData, _score: number | null) =>
+      "Cannot assess from metadata. Pin a comment within 1 hour of publishing with: (1) FundedNext link or relevant CTA, (2) a question that drives replies, (3) additional keywords not in the title. YouTube tracks pinned comment engagement as part of the overall video engagement score.",
+  },
+];

@@ -8,7 +8,9 @@ import type {
   VRSCriterion,
 } from "./types";
 import { YT_LONGFORM_CRITERIA } from "./vrs-criteria";
-import { TT_CRITERIA } from "./trs-criteria";
+import { TT_CRITERIA }          from "./trs-criteria";
+import { IG_CRITERIA }          from "./ig-criteria";
+import { YT_SHORTS_CRITERIA }   from "./yts-criteria";
 
 const TIER_LABELS: Record<VRSTier, string> = {
   1: "CRITICAL",
@@ -17,95 +19,108 @@ const TIER_LABELS: Record<VRSTier, string> = {
   4: "BASELINE",
 };
 
-// ─── New Channel Boost ───
-// YouTube's algorithm tests new creators aggressively via Browse/Suggested.
-// A channel with <5 videos gets algorithmic discovery boost, but has no organic base.
-// Net effect: slight upward adjustment to hidden score estimation.
+// ─── Platform → Criteria Routing ─────────────────────────────────────────
+// Each platform has distinct criteria with different weights and signals.
+// Routing here ensures the correct formula is applied automatically.
+
+export function getCriteriaForPlatform(platform?: string): VRSCriterion[] {
+  switch (platform) {
+    case "tiktok":       return TT_CRITERIA;
+    case "instagram":    return IG_CRITERIA;
+    case "youtube_short": return YT_SHORTS_CRITERIA;
+    case "youtube":
+    default:             return YT_LONGFORM_CRITERIA;
+  }
+}
+
+export function getPlatformLabel(platform?: string): string {
+  switch (platform) {
+    case "tiktok":        return "TikTok";
+    case "instagram":     return "Instagram Reels";
+    case "youtube_short": return "YouTube Shorts";
+    default:              return "YouTube Long-Form";
+  }
+}
+
+// ─── New Channel Boost (YouTube-specific) ────────────────────────────────
 
 function getNewChannelFactor(video: VideoData): number {
   const ctx = video.channelContext;
   if (!ctx) return 0;
-
-  const { videoCount, subs, channelAgeDays } = ctx;
-
-  // Brand new channel: <5 videos, <1000 subs
-  if (videoCount <= 5 && subs < 1000) {
-    // YouTube gives new channels a "testing boost" in Browse
-    // But they have no organic audience — net is slight positive
-    if (channelAgeDays < 90) return 0.08; // Very new — moderate discovery boost
-    return 0.04; // Somewhat new
+  if (ctx.videoCount <= 5 && ctx.subs < 1000) {
+    return ctx.channelAgeDays < 90 ? 0.08 : 0.04;
   }
-
-  // Small but established channel: growing
-  if (videoCount <= 20 && subs < 5000) {
-    return 0.02; // Slight boost for emerging creators
-  }
-
+  if (ctx.videoCount <= 20 && ctx.subs < 5000) return 0.02;
   return 0;
 }
 
-// ─── Hidden Score Estimation ───
-// Uses engagement velocity and performance signals as proxies for hidden criteria.
-// Hidden criteria (thumbnail, mobile thumb, visual promise, audio quality) require
-// visual/audio analysis that cannot be done from metadata alone.
+// ─── Hidden Score Estimation ─────────────────────────────────────────────
+// Estimates unassessable criteria (visual, audio) using observable proxies.
+// Platform-aware: different proxies matter on different platforms.
 
 function estimateHiddenScore(
   video: VideoData,
   earned: number,
   possible: number,
-  hiddenWeight: number
+  hiddenWeight: number,
+  platform?: string
 ): number {
   if (hiddenWeight <= 0) return 0;
 
-  const likeRatio = video.views > 0 ? (video.likes / video.views) * 100 : 0;
-  const commentRatio =
-    video.views > 0 ? (video.comments / video.views) * 100 : 0;
+  const likeRatio    = video.views > 0 ? (video.likes / video.views) * 100 : 0;
+  const commentRatio = video.views > 0 ? (video.comments / video.views) * 100 : 0;
+  const shareRatio   = video.views > 0 ? ((video.shares ?? 0) / video.views) * 100 : 0;
 
-  // Score 0-1 for each proxy signal
-  const likeFactor = Math.min(likeRatio / 5, 1);
+  const likeFactor    = Math.min(likeRatio / 5, 1);
   const commentFactor = Math.min(commentRatio / 3, 1);
+  const shareFactor   = Math.min(shareRatio / 1, 1);
 
-  // Duration factor: videos 8-25 min tend to have better production quality
-  const durMin = video.durationSeconds / 60;
-  const durationFactor =
-    durMin >= 8 && durMin <= 25
-      ? 0.7
-      : durMin >= 3 && durMin <= 45
-        ? 0.5
-        : 0.3;
+  const title         = video.title.toLowerCase();
+  const hasNumber     = /\d/.test(title);
+  const hasPowerWord  = /secret|revealed|shocking|insane|truth|proven|ultimate|never|always|how to|why|pass|fail/i.test(title);
+  const hasQuestion   = /\?/.test(title);
+  const packagingFactor = (hasNumber ? 0.25 : 0) + (hasPowerWord ? 0.25 : 0) + (hasQuestion ? 0.2 : 0) + 0.15;
 
-  // Title/thumbnail proxy: power words, numbers, and question marks signal strong packaging
-  const title = video.title.toLowerCase();
-  const hasNumber = /\d/.test(title);
-  const hasPowerWord =
-    /secret|revealed|shocking|insane|truth|proven|ultimate|never|always|how to|why/i.test(title);
-  const hasQuestion = /\?/.test(title);
-  const packagingFactor =
-    (hasNumber ? 0.25 : 0) +
-    (hasPowerWord ? 0.25 : 0) +
-    (hasQuestion ? 0.2 : 0) +
-    0.15;
-
-  // Assessed score quality
   const assessedRatio = possible > 0 ? earned / possible : 0;
-
-  // New channel boost
   const newChannelBoost = getNewChannelFactor(video);
 
-  // Weighted combination of proxy signals
-  const hiddenMultiplier =
-    likeFactor * 0.3 +
-    commentFactor * 0.2 +
-    durationFactor * 0.15 +
-    packagingFactor * 0.15 +
-    assessedRatio * 0.2 +
-    newChannelBoost;
+  let hiddenMultiplier: number;
 
-  // Clamp between 0.15 and 0.75
+  // Platform-specific proxy weighting for hidden criteria
+  if (platform === "tiktok" || platform === "instagram") {
+    // For short-form: shares and packaging quality are better proxies than duration
+    hiddenMultiplier =
+      shareFactor   * 0.35 +
+      likeFactor    * 0.20 +
+      commentFactor * 0.15 +
+      packagingFactor * 0.15 +
+      assessedRatio * 0.15;
+  } else if (platform === "youtube_short") {
+    // For Shorts: shares + packaging (Frame 1 quality) are primary
+    hiddenMultiplier =
+      shareFactor   * 0.30 +
+      packagingFactor * 0.25 +
+      likeFactor    * 0.20 +
+      commentFactor * 0.10 +
+      assessedRatio * 0.15;
+  } else {
+    // YouTube LF: duration optimisation + packaging quality
+    const durMin = video.durationSeconds / 60;
+    const durationFactor = durMin >= 8 && durMin <= 25 ? 0.7 : durMin >= 3 && durMin <= 45 ? 0.5 : 0.3;
+    hiddenMultiplier =
+      likeFactor    * 0.30 +
+      commentFactor * 0.20 +
+      durationFactor * 0.15 +
+      packagingFactor * 0.15 +
+      assessedRatio * 0.20 +
+      newChannelBoost;
+  }
+
   const clampedMultiplier = Math.max(0.15, Math.min(0.75, hiddenMultiplier));
-
   return hiddenWeight * clampedMultiplier;
 }
+
+// ─── Core VRS Runner ─────────────────────────────────────────────────────
 
 export function runVRS(
   video: VideoData,
@@ -118,25 +133,17 @@ export function runVRS(
   let hiddenWeight = 0;
 
   for (const c of criteria) {
-    const score = c.check(video);
+    const score        = c.check(video);
     const rationaleText = c.rationale(video, score);
 
     if (score === null) {
       hiddenCount++;
       hiddenWeight += c.weight;
-      results.push({
-        id: c.id,
-        label: c.label,
-        weight: c.weight,
-        tier: c.tier,
-        status: "hidden",
-        points: 0,
-        maxPoints: c.weight,
-        rationale: rationaleText,
-      });
+      results.push({ id: c.id, label: c.label, weight: c.weight, tier: c.tier,
+        status: "hidden", points: 0, maxPoints: c.weight, rationale: rationaleText });
     } else {
       const points = c.weight * score;
-      earned += points;
+      earned  += points;
       possible += c.weight;
 
       let status: CriterionStatus;
@@ -144,55 +151,33 @@ export function runVRS(
       else if (score >= 0.5) status = "partial";
       else status = "fail";
 
-      results.push({
-        id: c.id,
-        label: c.label,
-        weight: c.weight,
-        tier: c.tier,
-        status,
-        points,
-        maxPoints: c.weight,
-        rationale: rationaleText,
-      });
+      results.push({ id: c.id, label: c.label, weight: c.weight, tier: c.tier,
+        status, points, maxPoints: c.weight, rationale: rationaleText });
     }
   }
 
-  // Build tier summaries
   const tiers: VRSTier[] = [1, 2, 3, 4];
   const tierSummaries: VRSTierSummary[] = tiers.map((tier) => {
     const tierCriteria = results.filter((c) => c.tier === tier);
-    const assessed = tierCriteria.filter((c) => c.status !== "hidden");
+    const assessed     = tierCriteria.filter((c) => c.status !== "hidden");
     return {
       tier,
-      label: TIER_LABELS[tier],
-      earned: assessed.reduce((sum, c) => sum + c.points, 0),
+      label:    TIER_LABELS[tier],
+      earned:   assessed.reduce((sum, c) => sum + c.points, 0),
       possible: assessed.reduce((sum, c) => sum + c.maxPoints, 0),
       assessed: assessed.length,
-      total: tierCriteria.length,
+      total:    tierCriteria.length,
     };
   });
 
-  // Gap analysis
-  const gaps = results
-    .filter((c) => c.status === "fail" || c.status === "partial")
-    .sort((a, b) => b.weight - a.weight);
-
+  const gaps     = results.filter((c) => c.status === "fail" || c.status === "partial").sort((a, b) => b.weight - a.weight);
   const topFixes = gaps.slice(0, 3);
-
   const totalWeight = criteria.reduce((s, c) => s + c.weight, 0);
-  const score = possible > 0 ? Math.round((earned / possible) * 100) : 0;
+  const score    = possible > 0 ? Math.round((earned / possible) * 100) : 0;
 
-  // Estimate hidden criteria contribution
-  const estimatedHidden = estimateHiddenScore(
-    video,
-    earned,
-    possible,
-    hiddenWeight
-  );
-  const estimatedFullScore =
-    totalWeight > 0
-      ? Math.round(((earned + estimatedHidden) / totalWeight) * 100)
-      : 0;
+  const estimatedHidden = estimateHiddenScore(video, earned, possible, hiddenWeight, video.platform);
+  const estimatedFullScore = totalWeight > 0
+    ? Math.round(((earned + estimatedHidden) / totalWeight) * 100) : 0;
 
   return {
     score,
@@ -209,9 +194,27 @@ export function runVRS(
   };
 }
 
+// ─── Platform-Specific Runners ────────────────────────────────────────────
+
+/** Auto-routes to correct criteria based on video.platform field */
+export function runPlatformVRS(video: VideoData): VRSResult {
+  const criteria = getCriteriaForPlatform(video.platform);
+  return runVRS(video, criteria);
+}
+
 export function runTRS(video: VideoData): VRSResult {
   return runVRS(video, TT_CRITERIA);
 }
+
+export function runIRS(video: VideoData): VRSResult {
+  return runVRS(video, IG_CRITERIA);
+}
+
+export function runSRS(video: VideoData): VRSResult {
+  return runVRS(video, YT_SHORTS_CRITERIA);
+}
+
+// ─── Score Display Helpers ────────────────────────────────────────────────
 
 export function getVRSColor(score: number): string {
   if (score >= 90) return "var(--color-vrs-excellent)";
@@ -229,19 +232,27 @@ export function getVRSLabel(score: number): string {
   return "Fundamental rework";
 }
 
-export function getVRSExplanation(score: number, assessedCount: number, totalCriteria: number, referenceCount: number): string {
-  const label = getVRSLabel(score);
-  const tierDesc = score >= 90
-    ? "This video has strong signals across nearly all measurable criteria. It demonstrates the engagement patterns, packaging quality, and content structure that YouTube's algorithm actively promotes."
-    : score >= 75
-      ? "This video shows strong viral signals but has room for improvement in specific areas. The core metrics are solid — focus on the gap analysis below to identify the highest-impact improvements."
-      : score >= 60
-        ? "This video is competitive but not yet optimized for maximum algorithmic distribution. Several key signals are underperforming — the gap analysis shows exactly where to focus."
-        : score >= 40
-          ? "This video has significant gaps in viral readiness. Key signals like engagement, retention proxies, or packaging need attention before the algorithm will actively distribute it."
-          : "This video needs fundamental improvements across multiple criteria before it can compete for algorithmic distribution. Focus on the top 3 fixes below.";
+export function getVRSExplanation(
+  score: number,
+  assessedCount: number,
+  totalCriteria: number,
+  referenceCount: number,
+  platform?: string
+): string {
+  const label        = getVRSLabel(score);
+  const platformLabel = getPlatformLabel(platform);
 
-  return `VRS ${score}% — "${label}"\n\n${tierDesc}\n\nScored across ${assessedCount} of ${totalCriteria} criteria using live YouTube API data, engagement proxies, and content analysis. ${referenceCount > 0 ? `Compared against ${referenceCount} videos/channels in the reference pool.` : "Add more videos to the reference pool for comparative accuracy."}`;
+  const tierDesc = score >= 90
+    ? `This content has strong signals across nearly all measurable ${platformLabel} criteria. It demonstrates the engagement patterns and structural qualities the algorithm actively promotes.`
+    : score >= 75
+      ? `This content shows strong viral signals for ${platformLabel} but has room to improve. Core metrics are solid — focus on the gap analysis below for highest-impact fixes.`
+      : score >= 60
+        ? `This content is competitive on ${platformLabel} but not yet optimised for maximum distribution. Several key signals are underperforming — the gap analysis shows exactly where.`
+        : score >= 40
+          ? `This content has significant gaps in ${platformLabel} viral readiness. Key signals need attention before the algorithm will actively distribute it.`
+          : `This content needs fundamental improvements to compete for ${platformLabel} distribution. Focus on the top 3 fixes below — they carry the most algorithmic weight.`;
+
+  return `VRS ${score}% — "${label}"\n\n${tierDesc}\n\nScored across ${assessedCount} of ${totalCriteria} ${platformLabel} criteria. ${referenceCount > 0 ? `Compared against ${referenceCount} videos in the reference pool.` : "Add more videos to the reference pool for comparative accuracy."}`;
 }
 
 export function getTierColor(tier: VRSTier): string {
@@ -255,11 +266,5 @@ export function getTierColor(tier: VRSTier): string {
 }
 
 export function getStatusIcon(status: CriterionStatus): string {
-  const icons: Record<CriterionStatus, string> = {
-    pass: "\u2705",
-    partial: "\u26A0\uFE0F",
-    fail: "\u274C",
-    hidden: "\uD83D\uDD0D",
-  };
-  return icons[status];
+  return { pass: "✅", partial: "⚠️", fail: "❌", hidden: "🔍" }[status];
 }
