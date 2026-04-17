@@ -1851,71 +1851,189 @@ export default function Dashboard() {
                 </div>
 
 
-                {/* ── Row 2: Platform Signal Strength ── */}
-                <div className="glass-card scanline-card" style={{ padding: "20px 24px" }}>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="panel-label">Platform Algorithm Signals</div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="pulse-dot" style={{ width: 5, height: 5, background: "#2ECC8A", display: "inline-block", boxShadow: "0 0 5px #2ECC8A" }} />
-                      <span className="font-mono" style={{ fontSize: 9, color: "#2ECC8A", letterSpacing: "0.1em" }}>LIVE</span>
-                    </div>
-                  </div>
-                  <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-                    {PLATFORMS_STATUS.map(({ label, short, color, sig }) => {
-                      const noData   = sig.count === 0;
-                      const trendUp  = sig.trend.startsWith("+");
-                      return (
-                        <div key={short}>
-                          {/* Header row */}
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: noData ? "#3A3835" : color, display: "inline-block", boxShadow: noData ? "none" : `0 0 6px ${color}` }} />
-                              <span className="font-mono" style={{ fontSize: 10, color: noData ? "#5E5A57" : "#B8B6B1" }}>{short}</span>
-                              {!noData && <span className="font-mono" style={{ fontSize: 9, color: "#5E5A57" }}>{sig.count}v</span>}
-                            </div>
-                            {noData
-                              ? <span className="font-mono" style={{ fontSize: 8, color: "#5E5A57" }}>NO POOL DATA</span>
-                              : <span className="font-mono font-bold" style={{ fontSize: 9, color: trendUp ? "#2ECC8A" : "#FF4D6A" }}>{sig.trend}</span>
-                            }
-                          </div>
-                          {/* Score bar */}
-                          <div className="signal-bar mb-1.5">
-                            <div className="signal-bar-fill" style={{
-                              width: noData ? "0%" : `${sig.score}%`,
-                              background: noData ? "rgba(255,255,255,0.04)" : `linear-gradient(90deg, ${color}88, ${color})`,
-                              boxShadow: noData ? "none" : `0 0 14px ${color}CC, 0 0 28px ${color}44`,
-                              transition: "width 1.2s cubic-bezier(0.16,1,0.3,1)",
-                            }} />
-                          </div>
-                          {/* Footer row */}
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-mono" style={{ fontSize: 9, color: "#5E5A57" }}>{noData ? "—/100" : `${sig.score}/100`}</span>
-                            <span className="font-mono font-bold" style={{ fontSize: 8, letterSpacing: "0.08em", color: noData ? "#5E5A57" : sig.score >= 88 ? "#2ECC8A" : sig.score >= 78 ? "#F59E0B" : "#9E9C97" }}>
-                              {sig.status}
-                            </span>
-                          </div>
-                          {/* Sub-metrics */}
-                          {!noData && (
-                            <div className="flex gap-3">
-                              {[
-                                { label: "AVG VRS",  value: sig.avgVRS,           unit: "" },
-                                { label: "AVG ENG",  value: sig.avgEng,           unit: "%" },
-                                { label: "AVG VEL",  value: sig.avgVel >= 1000 ? `${(sig.avgVel/1000).toFixed(1)}K` : sig.avgVel, unit: "/d" },
-                              ].map(({ label, value, unit }) => (
-                                <div key={label}>
-                                  <div className="font-mono" style={{ fontSize: 7, color: "#4A4845", letterSpacing: "0.1em" }}>{label}</div>
-                                  <div className="font-mono font-semibold" style={{ fontSize: 10, color }}>
-                                    {value}{unit}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                {/* ── Pool Coverage — how much content the learning pool still needs ── */}
+                {(() => {
+                  // Tier targets from the pool-coverage reference table
+                  const TIERS = [
+                    { key: "youtube",       label: "YouTube Long-form", short: "YTL", color: "#EF4444", min:  80, std:  150, mat:  300 },
+                    { key: "youtube_short", label: "YouTube Shorts",    short: "YTS", color: "#EC4899", min: 150, std:  300, mat:  600 },
+                    { key: "instagram",     label: "Instagram Reels",   short: "IGR", color: "#E879F9", min: 150, std:  300, mat:  600 },
+                    { key: "tiktok",        label: "TikTok",            short: "TTK", color: "#06B6D4", min: 200, std:  400, mat:  800 },
+                    { key: "x",             label: "X (Twitter)",       short: "X",   color: "#9CA3AF", min: 400, std:  800, mat: 1500 },
+                  ] as const;
+
+                  // Count current entries per platform (referenceStore refreshes after every analysis)
+                  const counts: Record<string, number> = {};
+                  for (const t of TIERS) counts[t.key] = 0;
+                  if (referenceStore?.entries) {
+                    for (const e of referenceStore.entries) {
+                      if (e.platform && counts[e.platform] !== undefined) counts[e.platform]++;
+                    }
+                  }
+
+                  // Grand totals
+                  const grand = TIERS.reduce(
+                    (acc, t) => ({
+                      current: acc.current + counts[t.key],
+                      min:     acc.min     + t.min,
+                      std:     acc.std     + t.std,
+                      mat:     acc.mat     + t.mat,
+                    }),
+                    { current: 0, min: 0, std: 0, mat: 0 },
+                  );
+
+                  // Which tier should we hightlight as "next"? Pick the smallest unmet total.
+                  const nextGrandTier =
+                    grand.current < grand.min ? { label: "workable minimum", target: grand.min, color: "#F59E0B" } :
+                    grand.current < grand.std ? { label: "standard target",  target: grand.std, color: "#60A5FA" } :
+                    grand.current < grand.mat ? { label: "mature pool",      target: grand.mat, color: "#2ECC8A" } :
+                                                 { label: "mature pool (achieved)", target: grand.mat, color: "#2ECC8A" };
+
+                  return (
+                    <div className="glass-card scanline-card" style={{ padding: "20px 24px" }}>
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="panel-label">Pool Coverage · Learning Accuracy</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="pulse-dot" style={{ width: 5, height: 5, background: "#2ECC8A", display: "inline-block", boxShadow: "0 0 5px #2ECC8A" }} />
+                          <span className="font-mono" style={{ fontSize: 9, color: "#2ECC8A", letterSpacing: "0.1em" }}>LIVE</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      </div>
+                      <p className="font-mono" style={{ fontSize: 10, color: "#6B6964", marginBottom: 16, lineHeight: 1.55 }}>
+                        Updates in real-time as you analyse content. The more you analyse, the more accurate the engine's forecasts become.
+                      </p>
+
+                      {/* ── Grand totals: 3 stacked bars toward min/std/mature ── */}
+                      <div className="mb-5" style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                        <div className="flex items-baseline justify-between mb-3">
+                          <div>
+                            <div className="font-mono" style={{ fontSize: 10, color: "#8A8885", letterSpacing: "0.08em", textTransform: "uppercase" }}>Pool size</div>
+                            <div className="flex items-baseline gap-2 mt-1">
+                              <span className="font-mono" style={{ fontSize: 28, fontWeight: 500, color: "#E8E6E1", letterSpacing: "-0.02em" }}>
+                                {grand.current.toLocaleString()}
+                              </span>
+                              <span className="font-mono" style={{ fontSize: 11, color: "#5E5A57" }}>items</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-mono" style={{ fontSize: 9, color: nextGrandTier.color, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                              {grand.current >= nextGrandTier.target ? "tier achieved" : "next tier"}
+                            </div>
+                            <div className="font-mono" style={{ fontSize: 13, color: "#E8E6E1", marginTop: 2 }}>
+                              {grand.current >= nextGrandTier.target
+                                ? <span style={{ color: "#2ECC8A" }}>✓ {nextGrandTier.label}</span>
+                                : <>
+                                    <span style={{ color: nextGrandTier.color, fontWeight: 500 }}>{(nextGrandTier.target - grand.current).toLocaleString()}</span>
+                                    <span style={{ color: "#6B6964", marginLeft: 4 }}>to {nextGrandTier.label}</span>
+                                  </>
+                              }
+                            </div>
+                          </div>
+                        </div>
+
+                        {[
+                          { label: "Workable minimum", target: grand.min, color: "#F59E0B", desc: "engine functions" },
+                          { label: "Standard target",  target: grand.std, color: "#60A5FA", desc: "reliable benchmarking" },
+                          { label: "Mature pool",      target: grand.mat, color: "#2ECC8A", desc: "niche-specific patterns" },
+                        ].map(({ label, target, color, desc }) => {
+                          const pct = Math.min(100, (grand.current / target) * 100);
+                          const done = grand.current >= target;
+                          return (
+                            <div key={label} className="mb-2">
+                              <div className="flex items-baseline justify-between mb-1">
+                                <div className="flex items-baseline gap-2">
+                                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, display: "inline-block", boxShadow: `0 0 6px ${color}80`, flexShrink: 0 }} />
+                                  <span className="font-mono" style={{ fontSize: 10.5, color: "#B8B6B1", fontWeight: 500 }}>{label}</span>
+                                  <span className="font-mono" style={{ fontSize: 9, color: "#5E5A57" }}>— {desc}</span>
+                                </div>
+                                <span className="font-mono" style={{ fontSize: 10, color: done ? color : "#8A8885", fontWeight: done ? 500 : 400 }}>
+                                  {done ? "✓ " : ""}{grand.current.toLocaleString()} / {target.toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="signal-bar" style={{ height: 4 }}>
+                                <div className="signal-bar-fill" style={{
+                                  width: `${pct}%`,
+                                  background: `linear-gradient(90deg, ${color}66, ${color})`,
+                                  boxShadow: `0 0 8px ${color}66`,
+                                  transition: "width 0.8s cubic-bezier(0.16,1,0.3,1)",
+                                }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* ── Per-platform breakdown ── */}
+                      <div className="font-mono mb-3" style={{ fontSize: 9, color: "#6B6964", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                        Per platform
+                      </div>
+                      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+                        {TIERS.map((t) => {
+                          const c = counts[t.key];
+                          const nextTier =
+                            c < t.min ? { name: "minimum",  target: t.min, color: "#F59E0B" } :
+                            c < t.std ? { name: "standard", target: t.std, color: "#60A5FA" } :
+                            c < t.mat ? { name: "mature",   target: t.mat, color: "#2ECC8A" } :
+                                        { name: "mature",   target: t.mat, color: "#2ECC8A" };
+                          const pctMin = Math.min(100, (c / t.min) * 100);
+                          const pctStd = Math.min(100, (c / t.std) * 100);
+                          const pctMat = Math.min(100, (c / t.mat) * 100);
+                          const achieved = c >= t.mat;
+                          const remaining = Math.max(0, nextTier.target - c);
+
+                          return (
+                            <div key={t.key} style={{
+                              padding: "12px 14px",
+                              borderRadius: 9,
+                              background: "rgba(0,0,0,0.22)",
+                              border: `1px solid ${c === 0 ? "rgba(255,255,255,0.04)" : t.color + "20"}`,
+                            }}>
+                              <div className="flex items-baseline justify-between mb-2">
+                                <div className="flex items-baseline gap-2">
+                                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.color, display: "inline-block", boxShadow: `0 0 5px ${t.color}80`, flexShrink: 0 }} />
+                                  <span className="font-mono" style={{ fontSize: 10, color: "#B8B6B1", fontWeight: 500 }}>{t.short}</span>
+                                  <span className="font-mono" style={{ fontSize: 9, color: "#5E5A57" }}>{t.label}</span>
+                                </div>
+                                <span className="font-mono font-bold" style={{ fontSize: 12, color: "#E8E6E1" }}>{c.toLocaleString()}</span>
+                              </div>
+
+                              {/* 3-segment progress bar: each tier fills its own segment */}
+                              <div className="flex gap-1 mb-2">
+                                {[
+                                  { pct: pctMin, color: "#F59E0B", done: c >= t.min },
+                                  { pct: pctStd, color: "#60A5FA", done: c >= t.std },
+                                  { pct: pctMat, color: "#2ECC8A", done: c >= t.mat },
+                                ].map((seg, i) => (
+                                  <div key={i} className="signal-bar flex-1" style={{ height: 3 }}>
+                                    <div className="signal-bar-fill" style={{
+                                      width: `${seg.pct}%`,
+                                      background: seg.done ? seg.color : `${seg.color}66`,
+                                      boxShadow: seg.done ? `0 0 6px ${seg.color}aa` : "none",
+                                      transition: "width 0.7s cubic-bezier(0.16,1,0.3,1)",
+                                    }} />
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 font-mono" style={{ fontSize: 8.5, color: "#5E5A57", letterSpacing: "0.04em" }}>
+                                  <span>min {t.min}</span>
+                                  <span>·</span>
+                                  <span>std {t.std}</span>
+                                  <span>·</span>
+                                  <span>mat {t.mat}</span>
+                                </div>
+                                <span className="font-mono" style={{ fontSize: 9, color: achieved ? "#2ECC8A" : nextTier.color, fontWeight: 500 }}>
+                                  {achieved ? "✓ mature" : `${remaining.toLocaleString()} to ${nextTier.name}`}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
 
               </div>
