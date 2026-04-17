@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { forecast, type ManualInputs, type Platform, type DataSource } from "@/lib/forecast";
+import { forecast, projectAtDate, type ManualInputs, type Platform, type DataSource, type DateProjection } from "@/lib/forecast";
 import type { EnrichedVideo, VideoData } from "@/lib/types";
 import { formatNumber } from "@/lib/formatters";
 
@@ -20,6 +20,22 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
     () => forecast({ video, creatorHistory, platform, manualInputs }),
     [video, creatorHistory, platform, manualInputs],
   );
+
+  // Target date for custom projection — defaults to 30 days from publish (or from today if pre-publish)
+  const defaultTargetDate = useMemo(() => {
+    const anchor = video.publishedAt ? new Date(video.publishedAt) : new Date();
+    const target = new Date(anchor.getTime() + 30 * 86_400_000);
+    return target.toISOString().split("T")[0];  // YYYY-MM-DD
+  }, [video.publishedAt]);
+
+  const [targetDate, setTargetDate] = useState<string>(defaultTargetDate);
+
+  const dateProjection = useMemo<DateProjection | null>(() => {
+    if (!targetDate) return null;
+    const d = new Date(targetDate + "T12:00:00");
+    if (isNaN(d.getTime())) return null;
+    return projectAtDate(result, platform, d, video.publishedAt, video.views);
+  }, [result, platform, targetDate, video.publishedAt, video.views]);
 
   const update = (key: keyof ManualInputs, raw: string) => {
     const n = raw === "" ? undefined : Number(raw);
@@ -81,6 +97,16 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
         <MilestoneCard label="30 days"  data={d30} color="#2ECC8A" />
         <MilestoneCard label={`Lifetime (${horizon}d)`} data={lifetime} color="#FFD54F" emphasise />
       </div>
+
+      {/* ── Custom date projection ─────────────────────────────────────── */}
+      <DateProjectionCard
+        targetDate={targetDate}
+        onTargetDateChange={setTargetDate}
+        projection={dateProjection}
+        publishedAt={video.publishedAt}
+        horizonDays={horizon}
+        currentViews={video.views}
+      />
 
       {/* ── Creator baseline ────────────────────────────────────────────── */}
       {result.baseline && (
@@ -213,6 +239,124 @@ function MilestoneCard({ label, data, color, emphasise }: { label: string; data:
       </div>
       <div style={{ fontSize: 11, color: "#8A8883", fontFamily: "IBM Plex Mono, monospace" }}>
         {formatNumber(data.low)} – {formatNumber(data.high)}
+      </div>
+    </div>
+  );
+}
+
+function DateProjectionCard({
+  targetDate, onTargetDateChange, projection, publishedAt, horizonDays, currentViews,
+}: {
+  targetDate: string;
+  onTargetDateChange: (d: string) => void;
+  projection: DateProjection | null;
+  publishedAt?: string;
+  horizonDays: number;
+  currentViews: number;
+}) {
+  const anchorLabel = publishedAt
+    ? `published ${new Date(publishedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`
+    : "from today (pre-publish)";
+
+  // Min date: publish date (can't project before publish)
+  const minDate = publishedAt
+    ? new Date(publishedAt).toISOString().split("T")[0]
+    : new Date().toISOString().split("T")[0];
+
+  // Max date: publish + 2× horizon, lets users pick well beyond the confident window
+  const anchorMs = publishedAt ? new Date(publishedAt).getTime() : Date.now();
+  const maxDate = new Date(anchorMs + horizonDays * 2 * 86_400_000).toISOString().split("T")[0];
+
+  return (
+    <div
+      style={{
+        background: "rgba(167,139,250,0.04)",
+        border: "1px solid rgba(167,139,250,0.18)",
+        borderRadius: 10,
+        padding: "14px 16px",
+      }}
+    >
+      <div className="flex items-center justify-between flex-wrap gap-3" style={{ marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 10, color: "#6B6964", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 3 }}>
+            Custom date projection
+          </div>
+          <div style={{ fontSize: 12, color: "#A8A6A1" }}>
+            Views expected by a specific date — {anchorLabel}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <label style={{ fontSize: 11, color: "#6B6964", fontFamily: "IBM Plex Mono, monospace" }}>Target</label>
+          <input
+            type="date"
+            value={targetDate}
+            min={minDate}
+            max={maxDate}
+            onChange={(e) => onTargetDateChange(e.target.value)}
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(167,139,250,0.3)",
+              borderRadius: 4,
+              padding: "6px 10px",
+              fontSize: 12,
+              color: "#E8E6E1",
+              fontFamily: "IBM Plex Mono, monospace",
+              outline: "none",
+              colorScheme: "dark",
+            }}
+          />
+        </div>
+      </div>
+
+      {projection === null ? (
+        <div style={{ fontSize: 12, color: "#6B6964", fontStyle: "italic" }}>Pick a date to project views.</div>
+      ) : projection.beforePublish ? (
+        <div style={{ fontSize: 12, color: "#FF6B7A", padding: "10px 12px", background: "rgba(255,107,122,0.08)", borderRadius: 6, lineHeight: 1.5 }}>
+          Target date is before the publish date. Pick a date after {new Date(publishedAt!).toLocaleDateString()}.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3" style={{ marginBottom: 10 }}>
+            <ProjectionCell label="Low end"  value={projection.low}    color="#F59E0B" />
+            <ProjectionCell label="Expected" value={projection.median} color="#A78BFA" emphasise />
+            <ProjectionCell label="High end" value={projection.high}   color="#2ECC8A" />
+          </div>
+          <div style={{ fontSize: 11, color: "#8A8883", fontFamily: "IBM Plex Mono, monospace", lineHeight: 1.55, display: "flex", flexWrap: "wrap", gap: 14 }}>
+            <span>Day <span style={{ color: "#E8E6E1" }}>{projection.daysFromPublish.toFixed(1)}</span> from publish</span>
+            <span>·</span>
+            <span>Platform gives ~<span style={{ color: "#E8E6E1" }}>{(projection.shareAtDate * 100).toFixed(0)}%</span> of lifetime reached by this date</span>
+            {currentViews > 0 && projection.median === currentViews && (
+              <>
+                <span>·</span>
+                <span style={{ color: "#F59E0B" }}>Floored at current views ({formatNumber(currentViews)})</span>
+              </>
+            )}
+            {projection.beyondHorizon && (
+              <>
+                <span>·</span>
+                <span style={{ color: "#F59E0B" }}>Beyond platform horizon — capped at lifetime</span>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ProjectionCell({ label, value, color, emphasise }: { label: string; value: number; color: string; emphasise?: boolean }) {
+  return (
+    <div
+      style={{
+        background: emphasise ? "rgba(167,139,250,0.08)" : "rgba(255,255,255,0.03)",
+        border: `1px solid ${emphasise ? "rgba(167,139,250,0.3)" : "rgba(255,255,255,0.06)"}`,
+        borderRadius: 8,
+        padding: "12px 14px",
+      }}
+    >
+      <div style={{ fontSize: 10, color: "#6B6964", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 500, color, lineHeight: 1.1, fontFamily: "IBM Plex Mono, monospace" }}>
+        {formatNumber(value)}
       </div>
     </div>
   );

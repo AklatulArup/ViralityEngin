@@ -253,6 +253,67 @@ const PLATFORM_CONFIG: Record<Platform, {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PROJECT AT ARBITRARY DATE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Takes a forecast result + target date and returns the low/median/high
+// projected views at that specific date, using the platform's decay curve
+// to scale from the lifetime forecast.
+
+export interface DateProjection {
+  low:             number;
+  median:          number;
+  high:            number;
+  daysFromPublish: number;
+  shareAtDate:     number;    // 0-1, fraction of lifetime reached by target
+  beyondHorizon:   boolean;   // true if target is past platform's horizon
+  beforePublish:   boolean;   // true if target is before the publish date
+}
+
+export function projectAtDate(
+  result:       Forecast,
+  platform:     Platform,
+  targetDate:   Date,
+  publishedAt?: string,
+  currentViews: number = 0,
+): DateProjection {
+  const cfg = PLATFORM_CONFIG[platform];
+
+  // Anchor: publish date if known, otherwise now (pre-publish)
+  const anchorMs = publishedAt ? new Date(publishedAt).getTime() : Date.now();
+  const targetMs = targetDate.getTime();
+  const daysFromPublish = (targetMs - anchorMs) / 86_400_000;
+
+  // Edge case: target date before publish date
+  if (daysFromPublish < 0) {
+    return {
+      low: 0, median: 0, high: 0,
+      daysFromPublish, shareAtDate: 0,
+      beyondHorizon: false, beforePublish: true,
+    };
+  }
+
+  const beyondHorizon = daysFromPublish > cfg.horizonDays;
+  const share = cfg.cumulativeShare(daysFromPublish);
+
+  // Scale lifetime forecast by share at target date
+  let low    = Math.round(result.lifetime.low    * share);
+  let median = Math.round(result.lifetime.median * share);
+  let high   = Math.round(result.lifetime.high   * share);
+
+  // Floor: projections can never be below current views (views don't go backwards)
+  low    = Math.max(low,    currentViews);
+  median = Math.max(median, currentViews);
+  high   = Math.max(high,   currentViews);
+
+  return {
+    low, median, high,
+    daysFromPublish, shareAtDate: share,
+    beyondHorizon, beforePublish: false,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
