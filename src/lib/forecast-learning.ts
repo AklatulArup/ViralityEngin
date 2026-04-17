@@ -176,17 +176,23 @@ export function recordForecast(params: {
     manualInputsProvided: params.manualInputsProvided,
   };
 
+  // 1) Persist locally (per-device cache for offline calibration views)
   const existing = getBrowserStore();
-  // Dedupe: if we already have a snapshot for this video within the last hour, skip
   const hourAgo = Date.now() - 3600_000;
   const filtered = existing.filter(s =>
     !(s.videoId === snapshot.videoId && new Date(s.forecastedAt).getTime() > hourAgo)
   );
   filtered.push(snapshot);
+  setBrowserStore(filtered.slice(-500));
 
-  // Keep last 500 to avoid localStorage bloat
-  const trimmed = filtered.slice(-500);
-  setBrowserStore(trimmed);
+  // 2) Persist remotely (shared pool for team-wide calibration) — fire and forget
+  if (typeof window !== "undefined") {
+    fetch("/api/forecast/snapshot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(snapshot),
+    }).catch((e) => console.warn("[forecast-learning] remote persist failed:", e));
+  }
 
   return snapshot;
 }
