@@ -27,12 +27,6 @@ import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import CollapsibleSection from "./CollapsibleSection";
 import AlgorithmIntelPanel from "./AlgorithmIntelPanel";
 import AdjacentVideos from "./AdjacentVideos";
-import DescriptionSEOPanel from "./DescriptionSEOPanel";
-import EngagementDecayPanel from "./EngagementDecayPanel";
-import ThumbnailPanel from "./ThumbnailPanel";
-import CompetitorGapPanel from "./CompetitorGapPanel";
-import TagCorrelationPanel from "./TagCorrelationPanel";
-import UploadCadencePanel from "./UploadCadencePanel";
 import ExpertWarRoomPanel from "./ExpertWarRoomPanel";
 
 interface VideoResultProps {
@@ -281,34 +275,9 @@ export default function VideoResult({
       </CollapsibleSection>
 
       {/* ── Video-Level Analysis Panels ── */}
-
-      {/* Description SEO */}
-      {descriptionSEO && <DescriptionSEOPanel seo={descriptionSEO} />}
-
-      {/* Engagement Decay / Content Lifecycle */}
-      {engagementDecay && (
-        <EngagementDecayPanel decay={engagementDecay} currentViews={video.views} />
-      )}
-
-      {/* Thumbnail Metadata */}
-      {thumbnailAnalysis && <ThumbnailPanel analysis={thumbnailAnalysis} />}
-
-      {/* ── Reference Pool Aggregate Panels ── */}
-
-      {/* Competitor Gap */}
-      {competitorGap && competitorGap.competitors.length > 0 && (
-        <CompetitorGapPanel matrix={competitorGap} />
-      )}
-
-      {/* Tag Correlation */}
-      {tagCorrelation && tagCorrelation.topTags.length > 0 && (
-        <TagCorrelationPanel result={tagCorrelation} />
-      )}
-
-      {/* Upload Cadence */}
-      {uploadCadence && uploadCadence.entries.length > 0 && (
-        <UploadCadencePanel cadence={uploadCadence} />
-      )}
+      {/* Description SEO / Engagement Decay / Thumbnail / Competitor Gap /
+          Tag Correlation / Upload Cadence panels removed from view per request.
+          Data still computed upstream; components still exist for future re-enable. */}
 
       {/* Reference Context */}
       {referenceContext && referenceContext.length > 0 && (
