@@ -80,22 +80,12 @@ export default function CalibrationPage() {
             The engine proposes these parameter changes based on observed bias. Review and apply selectively.
           </div>
           {suggestions.map((s, i) => (
-            <div key={i} style={suggestionStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "#FFD54F" }}>
-                  {PLATFORM_LABELS[s.platform]} — {s.parameter}
-                </div>
-                <div style={{ fontSize: 11, color: "#8A8883", fontFamily: "IBM Plex Mono, monospace" }}>
-                  {s.deltaPercent > 0 ? "+" : ""}{s.deltaPercent}% · {s.confidence} conf · n={s.sampleSize}
-                </div>
-              </div>
-              <div style={{ fontSize: 12, color: "#A8A6A1", lineHeight: 1.55 }}>
-                {s.rationale}
-              </div>
-            </div>
+            <SuggestionCard key={`${s.platform}-${s.parameter}-${i}`} suggestion={s} />
           ))}
         </section>
       )}
+
+      <AppliedOverrides />
 
       <section style={{ marginBottom: 28 }}>
         <SectionHeading>By platform</SectionHeading>
@@ -272,4 +262,179 @@ const worstRowStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 12,
+};
+
+// ─── SUGGESTION CARD WITH APPLY/REJECT ────────────────────────────────────
+
+function SuggestionCard({ suggestion }: { suggestion: LearningAdjustment }) {
+  const [state, setState] = useState<"pending" | "applying" | "applied" | "rejected" | "error">("pending");
+  const [errorMsg, setErrorMsg] = useState<string>("");
+
+  const handleApply = async () => {
+    setState("applying");
+    try {
+      const r = await fetch("/api/forecast/tuning", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "apply",
+          platform:      suggestion.platform,
+          parameter:     suggestion.parameter,
+          originalValue: suggestion.currentValue,
+          newValue:      suggestion.suggestedValue,
+          deltaPercent:  suggestion.deltaPercent,
+          rationale:     suggestion.rationale,
+          sampleSize:    suggestion.sampleSize,
+        }),
+      });
+      const data = await r.json();
+      if (data?.ok) setState("applied");
+      else { setState("error"); setErrorMsg(data?.error ?? "Unknown error"); }
+    } catch (e) {
+      setState("error");
+      setErrorMsg(e instanceof Error ? e.message : "Network error");
+    }
+  };
+
+  const handleReject = () => setState("rejected");
+
+  const stateColors = {
+    pending:   "#FFD54F",
+    applying:  "#60A5FA",
+    applied:   "#2ECC8A",
+    rejected:  "#6B6964",
+    error:     "#FF6B7A",
+  } as const;
+  const borderColor = stateColors[state];
+
+  return (
+    <div style={{ ...suggestionStyle, borderLeftColor: borderColor, opacity: state === "rejected" ? 0.5 : 1 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: borderColor }}>
+          {PLATFORM_LABELS[suggestion.platform]} — {suggestion.parameter}
+        </div>
+        <div style={{ fontSize: 11, color: "#8A8883", fontFamily: "IBM Plex Mono, monospace" }}>
+          {suggestion.deltaPercent > 0 ? "+" : ""}{suggestion.deltaPercent}% · {suggestion.confidence} conf · n={suggestion.sampleSize}
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: "#A8A6A1", lineHeight: 1.55, marginBottom: 10 }}>
+        {suggestion.rationale}
+      </div>
+      {state === "pending" && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={handleApply} style={buttonPrimaryStyle}>Apply</button>
+          <button onClick={handleReject} style={buttonSecondaryStyle}>Reject</button>
+        </div>
+      )}
+      {state === "applying" && (
+        <div style={{ fontSize: 11, color: "#60A5FA", fontFamily: "IBM Plex Mono, monospace" }}>Applying…</div>
+      )}
+      {state === "applied" && (
+        <div style={{ fontSize: 11, color: "#2ECC8A", fontFamily: "IBM Plex Mono, monospace" }}>✓ Applied. Next forecasts will use this override.</div>
+      )}
+      {state === "rejected" && (
+        <div style={{ fontSize: 11, color: "#6B6964", fontFamily: "IBM Plex Mono, monospace", fontStyle: "italic" }}>Rejected.</div>
+      )}
+      {state === "error" && (
+        <div style={{ fontSize: 11, color: "#FF6B7A", fontFamily: "IBM Plex Mono, monospace" }}>Error: {errorMsg}</div>
+      )}
+    </div>
+  );
+}
+
+// ─── APPLIED OVERRIDES LIST ───────────────────────────────────────────────
+
+interface TuningOverride {
+  platform:      Platform;
+  parameter:     string;
+  originalValue: number;
+  newValue:      number;
+  deltaPercent:  number;
+  appliedAt:     string;
+  rationale:     string;
+  sampleSize:    number;
+}
+
+function AppliedOverrides() {
+  const [overrides, setOverrides] = useState<TuningOverride[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/forecast/tuning")
+      .then(r => r.json())
+      .then(d => {
+        if (d?.ok && Array.isArray(d.overrides)) setOverrides(d.overrides);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const handleRevert = async (o: TuningOverride) => {
+    const r = await fetch("/api/forecast/tuning", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "revert", platform: o.platform, parameter: o.parameter }),
+    });
+    const d = await r.json();
+    if (d?.ok && Array.isArray(d.state?.overrides)) setOverrides(d.state.overrides);
+  };
+
+  if (!loaded) return null;
+  if (overrides.length === 0) return null;
+
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <SectionHeading>Currently applied overrides</SectionHeading>
+      <div style={{ fontSize: 12, color: "#A8A6A1", marginBottom: 12 }}>
+        Tuning adjustments you've approved. Active on all forecasts until reverted.
+      </div>
+      {overrides.map((o, i) => (
+        <div key={`${o.platform}-${o.parameter}-${i}`} style={appliedOverrideStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "#2ECC8A" }}>
+              {PLATFORM_LABELS[o.platform]} — {o.parameter}
+            </div>
+            <div style={{ fontSize: 11, color: "#8A8883", fontFamily: "IBM Plex Mono, monospace" }}>
+              {o.deltaPercent > 0 ? "+" : ""}{o.deltaPercent}% · applied {new Date(o.appliedAt).toLocaleDateString()}
+            </div>
+          </div>
+          <div style={{ fontSize: 11.5, color: "#A8A6A1", lineHeight: 1.5, marginBottom: 8 }}>{o.rationale}</div>
+          <button onClick={() => handleRevert(o)} style={buttonSecondaryStyle}>Revert</button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+const buttonPrimaryStyle: React.CSSProperties = {
+  background: "rgba(255,213,79,0.15)",
+  border: "1px solid rgba(255,213,79,0.5)",
+  color: "#FFD54F",
+  padding: "5px 14px",
+  borderRadius: 5,
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.15)",
+  color: "#A8A6A1",
+  padding: "5px 14px",
+  borderRadius: 5,
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+const appliedOverrideStyle: React.CSSProperties = {
+  background: "rgba(46,204,138,0.04)",
+  border: "1px solid rgba(46,204,138,0.25)",
+  borderLeft: "3px solid #2ECC8A",
+  borderRadius: 8,
+  padding: "12px 14px",
+  marginBottom: 8,
 };

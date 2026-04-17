@@ -170,7 +170,7 @@ export interface DataSource {
 // PLATFORM CONSTANTS — tuned per platform, single source of truth
 // ═══════════════════════════════════════════════════════════════════════════
 
-const PLATFORM_CONFIG: Record<Platform, {
+export const PLATFORM_CONFIG: Record<Platform, {
   label:          string;
   horizonDays:    number;
   cumulativeShare: (day: number) => number;  // 0-1: fraction of lifetime views by day N
