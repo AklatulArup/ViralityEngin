@@ -124,12 +124,13 @@ function trim(p: string, max = 2800) {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { prompt?: string; persona?: string; platform?: string };
+  let body: { prompt?: string; persona?: string; platform?: string; system?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   if (!body.prompt) return NextResponse.json({ error: "prompt required" }, { status: 400 });
 
-  const system = buildSystemPrompt(body.persona ?? "default", body.platform);
+  // Allow callers to pass a custom system prompt (used by 9-persona sequential deliberation)
+  const system = body.system ?? buildSystemPrompt(body.persona ?? "default", body.platform);
   const prompt = trim(body.prompt);
   const errors: string[] = [];
 
