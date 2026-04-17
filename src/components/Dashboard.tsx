@@ -82,9 +82,7 @@ import HashtagBankManager from "./HashtagBankManager";
 import CompetitorBankManager from "./CompetitorBankManager";
 import type { Competitor } from "./CompetitorBankManager";
 import CreatorBlocklist from "./CreatorBlocklist";
-import ViewForecastPanel from "./ViewForecastPanel";
-import ViewPredictorPanel from "./ViewPredictorPanel";
-import UnifiedForecastPanel from "./UnifiedForecastPanel";
+import ForecastPanel from "./ForecastPanel";
 import { xPostToEnrichedVideo } from "@/lib/x-adapter";
 import BulkCSVImportPanel from "./BulkCSVImportPanel";
 import HistoryCalendar from "./HistoryCalendar";
@@ -139,7 +137,6 @@ export default function Dashboard() {
     categories: { viral: string[]; brand: string[]; niche: string[]; campaign: string[] };
   } | null>(null);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
-  const [forecastDate, setForecastDate] = useState<string>("");
   const [instagramInput, setInstagramInput] = useState("");
   const [instagramStatus, setInstagramStatus] = useState("");
   const [tiktokInputVal, setTiktokInputVal] = useState("");
@@ -2129,12 +2126,10 @@ export default function Dashboard() {
                   {metrics.map((m, i) => <MetricCard key={m.label} {...m} index={i} />)}
                 </div>
                 <div className="fade-up-1">
-                  <UnifiedForecastPanel
+                  <ForecastPanel
                     video={v}
                     creatorHistory={result.recentVideos.filter(r => r.id !== v.id)}
                     platform={(v.platform as "youtube" | "youtube_short" | "tiktok" | "instagram" | "x") || "youtube"}
-                    forecastDate={forecastDate}
-                    onDateChange={setForecastDate}
                   />
                 </div>
                 <div className="fade-up-2">
@@ -2203,12 +2198,10 @@ export default function Dashboard() {
                 )}
                 {posts[0] && (
                   <div className="fade-up-1">
-                    <UnifiedForecastPanel
+                    <ForecastPanel
                       video={xPostToEnrichedVideo(posts[0], posts)}
                       creatorHistory={posts.slice(1).map(p => xPostToEnrichedVideo(p, posts))}
                       platform="x"
-                      forecastDate={forecastDate}
-                      onDateChange={setForecastDate}
                     />
                   </div>
                 )}
@@ -2239,12 +2232,10 @@ export default function Dashboard() {
                 </div>
                 {topVideo && (
                   <div className="fade-up-1">
-                    <UnifiedForecastPanel
+                    <ForecastPanel
                       video={topVideo}
                       creatorHistory={result.videos.filter(r => r.id !== topVideo.id)}
                       platform={(topVideo.platform as "youtube" | "youtube_short" | "tiktok" | "instagram" | "x") || "tiktok"}
-                      forecastDate={forecastDate}
-                      onDateChange={setForecastDate}
                     />
                   </div>
                 )}
