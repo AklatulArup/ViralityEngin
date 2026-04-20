@@ -75,6 +75,7 @@ export default function LandingPage() {
       {/* ── MAIN ────────────────────────────────────────────────── */}
       <main style={{ padding: "22px 26px", display: "flex", flexDirection: "column", gap: 22, borderRight: `1px solid ${T.line}`, overflowY: "auto" }}>
         <PoolCoverage stats={stats} />
+        <LearningAccuracy />
         <LiveSignalFeed signals={signals} />
       </main>
 
@@ -219,6 +220,279 @@ function LiveSignalFeed({ signals }: { signals: Array<{ label: string; value: st
             <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 12, color: s.active ? s.color : T.inkFaint }}>{s.value}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── LEARNING ACCURACY PANEL ──────────────────────────────────────────
+//
+// Shows the real measured accuracy (MdAPE, 80% coverage, direction-correct)
+// per platform from the forecast-learning loop. Reads /api/forecast/calibration
+// which aggregates every persisted ForecastSnapshot whose outcome has
+// matured (the collect-outcomes cron re-scrapes the video at the platform's
+// maturity window and writes back the actual view count).
+//
+// When the per-platform sample size is below 20 the report is untrustworthy,
+// so we surface a "warming up · awaiting N more outcomes" state instead of
+// a meaningless MdAPE number. That honesty matters — showing "MdAPE 3%" on
+// n=2 would be a lie.
+
+const MIN_SAMPLE = 20;
+// Per-platform maturity windows (days) used by the collect-outcomes cron.
+const MATURITY_DAYS: Record<string, number> = {
+  youtube:       90,
+  youtube_short: 60,
+  tiktok:        30,
+  instagram:     35,
+  x:              3,
+};
+
+interface CalibrationReportLite {
+  platform:        string;
+  sampleSize:      number;
+  medianAPE:       number;
+  coverage:        number;
+  directionCorrect:number;
+  meanSignedError: number;
+}
+
+interface CalibrationAPI {
+  ok: boolean;
+  byPlatform?: Array<{ platform: string; report: CalibrationReportLite }>;
+  withOutcomes?: number;
+  sampleSize?:   number;
+  reason?:       string;
+}
+
+function LearningAccuracy() {
+  const [data,    setData]    = useState<CalibrationAPI | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err,     setErr]     = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+    const load = () => {
+      setLoading(true);
+      fetch("/api/forecast/calibration")
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (cancelled) return;
+          if (!d) { setErr("fetch_failed"); setLoading(false); return; }
+          setData(d as CalibrationAPI);
+          setErr(null);
+          setLoading(false);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setErr("network_error");
+          setLoading(false);
+        });
+    };
+    load();
+    // Refresh whenever the pool updates (new analyses can mean new outcomes
+    // if any of the just-analyzed videos crossed the maturity window).
+    window.addEventListener("ve:pool-updated", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ve:pool-updated", load);
+    };
+  }, []);
+
+  const rows = useMemo(() => {
+    const byPlatform = data?.byPlatform ?? [];
+    // Maintain a stable platform order matching the rest of the UI.
+    const order: Platform[] = ["youtube", "youtube_short", "tiktok", "instagram", "x"];
+    return order.map(p => {
+      const found = byPlatform.find(b => b.platform === p);
+      return { platform: p, report: found?.report };
+    });
+  }, [data]);
+
+  return (
+    <section>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap", marginBottom: 8 }}>
+        <div>
+          <V5SectionHeader>Learning accuracy · per platform</V5SectionHeader>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: 99,
+            background: (data?.withOutcomes ?? 0) > 0 ? T.green : T.amber,
+            boxShadow: `0 0 8px ${(data?.withOutcomes ?? 0) > 0 ? T.green : T.amber}`,
+          }} />
+          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkDim, letterSpacing: 1 }}>
+            {loading ? "LOADING"
+              : err   ? "OFFLINE"
+              : (data?.withOutcomes ?? 0) === 0 ? "WARMING UP"
+              : `${data?.withOutcomes} MATURED`}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12, color: T.inkMuted, lineHeight: 1.55, marginBottom: 14 }}>
+        Measured median % error of past forecasts where the actual view count has matured. Until
+        each platform crosses <span style={{ fontFamily: "IBM Plex Mono, monospace", color: T.ink }}>{MIN_SAMPLE}</span> matured outcomes the
+        reading is shown as &ldquo;warming up&rdquo; — we don&apos;t report a MdAPE we can&apos;t trust.
+      </div>
+
+      <div style={{ border: `1px solid ${T.line}`, borderRadius: 4, overflow: "hidden" }}>
+        {/* Header */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "140px 80px 80px 80px 1fr 120px",
+          columnGap: 14,
+          padding: "9px 14px",
+          background: T.bgRow,
+          borderBottom: `1px solid ${T.line}`,
+          fontFamily: "IBM Plex Mono, monospace",
+          fontSize: 9.5,
+          color: T.inkFaint,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+        }}>
+          <div>Platform</div>
+          <div style={{ textAlign: "right" }}>MdAPE</div>
+          <div style={{ textAlign: "right" }}>80% cov.</div>
+          <div style={{ textAlign: "right" }}>Direction</div>
+          <div>Confidence</div>
+          <div style={{ textAlign: "right" }}>Status</div>
+        </div>
+        {rows.map((row, i) => (
+          <AccuracyRow
+            key={row.platform}
+            platform={row.platform}
+            report={row.report}
+            last={i === rows.length - 1}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AccuracyRow({
+  platform,
+  report,
+  last,
+}: {
+  platform: Platform;
+  report:   CalibrationReportLite | undefined;
+  last:     boolean;
+}) {
+  const pl = PLATFORMS[platform];
+  const n  = report?.sampleSize ?? 0;
+  const matured       = n >= MIN_SAMPLE;
+  const mdapePct      = report ? report.medianAPE * 100 : 0;
+  const coveragePct   = report ? report.coverage * 100  : 0;
+  const directionPct  = report ? report.directionCorrect * 100 : 0;
+
+  // MdAPE color bands — tighter = greener.
+  const mdapeColor =
+    !matured        ? T.inkFaint :
+    mdapePct <= 15  ? T.green    :
+    mdapePct <= 25  ? T.blue     :
+    mdapePct <= 40  ? T.amber    :
+                      T.red;
+
+  // Confidence readout: either a realistic % based on MdAPE, or an "awaiting"
+  // countdown telling the RM how many more outcomes + how long.
+  let confidenceBar: React.ReactNode;
+  if (matured) {
+    // Convert MdAPE → rough "confidence %" (100 - mdape, floored at 0, with
+    // a coverage penalty if the interval doesn't hit its 80% target).
+    const coverageGap = Math.max(0, 80 - coveragePct); // 0 if ≥ 80
+    const confidence  = Math.max(0, Math.min(100, 100 - mdapePct - coverageGap * 0.5));
+    const fillColor   = confidence >= 75 ? T.green : confidence >= 55 ? T.blue : confidence >= 35 ? T.amber : T.red;
+    confidenceBar = (
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, height: 4, background: T.line, borderRadius: 99, overflow: "hidden" }}>
+          <div style={{
+            width: `${confidence}%`, height: "100%",
+            background: `linear-gradient(90deg, ${fillColor}66, ${fillColor})`,
+            boxShadow: `0 0 6px ${fillColor}66`,
+            transition: "width 0.7s cubic-bezier(0.16,1,0.3,1)",
+          }} />
+        </div>
+        <span style={{
+          fontFamily: "IBM Plex Mono, monospace", fontSize: 10.5,
+          color: fillColor, fontVariantNumeric: "tabular-nums", minWidth: 36, textAlign: "right",
+        }}>
+          {confidence.toFixed(0)}%
+        </span>
+      </div>
+    );
+  } else {
+    const need       = Math.max(0, MIN_SAMPLE - n);
+    const maturityD  = MATURITY_DAYS[platform] ?? 30;
+    confidenceBar = (
+      <div style={{
+        fontFamily: "IBM Plex Mono, monospace", fontSize: 10.5,
+        color: T.inkMuted, lineHeight: 1.5,
+      }}>
+        {n === 0
+          ? <>no outcomes yet · {maturityD}d after first forecast</>
+          : <>warming up · <span style={{ color: T.amber }}>{need} more needed</span> (of {MIN_SAMPLE})</>
+        }
+      </div>
+    );
+  }
+
+  // Status pill
+  const status =
+    !report || n === 0 ? { text: "awaiting",   color: T.inkFaint } :
+    !matured           ? { text: "warming up", color: T.amber    } :
+    mdapePct <= 20     ? { text: "reliable",   color: T.green    } :
+    mdapePct <= 35     ? { text: "workable",   color: T.blue     } :
+                         { text: "needs tune", color: T.red      };
+
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "140px 80px 80px 80px 1fr 120px",
+      columnGap: 14,
+      padding: "11px 14px",
+      alignItems: "center",
+      fontFamily: "IBM Plex Mono, monospace",
+      fontSize: 11,
+      color: T.inkDim,
+      borderBottom: last ? "none" : `1px solid ${T.line}`,
+    }}>
+      {/* Platform */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: pl.color, flexShrink: 0 }} />
+        <span style={{ color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {pl.label}
+        </span>
+      </div>
+      {/* MdAPE */}
+      <div style={{ textAlign: "right", color: mdapeColor, fontVariantNumeric: "tabular-nums" }}>
+        {matured ? `${mdapePct.toFixed(1)}%` : "—"}
+      </div>
+      {/* Coverage */}
+      <div style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: matured ? T.inkDim : T.inkFaint }}>
+        {matured ? `${coveragePct.toFixed(0)}%` : "—"}
+      </div>
+      {/* Direction accuracy */}
+      <div style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: matured ? T.inkDim : T.inkFaint }}>
+        {matured ? `${directionPct.toFixed(0)}%` : "—"}
+      </div>
+      {/* Confidence bar or warming-up text */}
+      <div>{confidenceBar}</div>
+      {/* Status pill */}
+      <div style={{ textAlign: "right" }}>
+        <span style={{
+          fontFamily: "IBM Plex Mono, monospace", fontSize: 9.5, letterSpacing: "0.05em",
+          padding: "3px 10px", borderRadius: 99,
+          background: `${status.color}14`,
+          border:     `1px solid ${status.color}33`,
+          color:       status.color,
+          textTransform: "uppercase",
+          whiteSpace:    "nowrap",
+        }}>
+          {status.text}
+        </span>
       </div>
     </div>
   );
