@@ -1,5 +1,14 @@
 "use client";
 
+// When embedded inside the NewDashboard shell, pass `headless` to hide the
+// legacy Dashboard's own sidebar + sticky top bar (which otherwise duplicate
+// the new shell's chrome, producing two search bars and a double-sidebar).
+// The analyze pipeline and result rendering continue to work.
+
+interface DashboardProps {
+  headless?: boolean;
+}
+
 interface HistoryEntry {
   id: string;
   url: string;
@@ -116,7 +125,7 @@ function enrichVideo(
   };
 }
 
-export default function Dashboard() {
+export default function Dashboard({ headless = false }: DashboardProps = {}) {
   const [activeModes, setActiveModes] = useState<ModeId[]>(["F", "G", "C"]);
   const [inputTab, setInputTab] = useState<InputTab>("youtube");
   const [loading, setLoading] = useState(false);
@@ -164,6 +173,21 @@ export default function Dashboard() {
   const [competitorGap, setCompetitorGap] = useState<CompetitorGapMatrix | null>(null);
   const [tagCorrelation, setTagCorrelation] = useState<TagCorrelationResult | null>(null);
   const [uploadCadence, setUploadCadence] = useState<UploadCadenceResult | null>(null);
+
+  // Headless-mode handoff: when embedded inside NewDashboard, the new
+  // TopBar writes the URL to sessionStorage and navigates us to the
+  // forecast route. On mount we check for that pending URL, clear it, and
+  // kick off the analyze pipeline automatically so there's no orphan state.
+  useEffect(() => {
+    if (!headless || typeof window === "undefined") return;
+    const pending = window.sessionStorage.getItem("ve_pending_analyze");
+    if (!pending) return;
+    window.sessionStorage.removeItem("ve_pending_analyze");
+    // Defer to next tick so analyze() closure captures fully-initialised state.
+    const t = setTimeout(() => { analyze(pending).catch(() => {}); }, 0);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headless]);
 
   // Load reference store and keyword bank on mount
   useEffect(() => {
@@ -964,17 +988,21 @@ export default function Dashboard() {
       <StarfieldCanvas opacity={0.55} />
       <CursorGlow />
 
-      {/* Ambient nebula behind sidebar */}
-      <div style={{
-        position: "fixed", top: "-10%", left: -80, width: 480, height: 600,
-        background: "radial-gradient(ellipse at 0% 40%, rgba(96,165,250,0.055) 0%, rgba(123,79,255,0.03) 50%, transparent 75%)",
-        pointerEvents: "none", zIndex: 1,
-        animation: "nebulaDrift 25s ease-in-out infinite alternate",
-      }} />
+      {/* Ambient nebula behind sidebar — suppressed when headless to avoid
+          duplicating background with the new shell's darker canvas. */}
+      {!headless && (
+        <div style={{
+          position: "fixed", top: "-10%", left: -80, width: 480, height: 600,
+          background: "radial-gradient(ellipse at 0% 40%, rgba(96,165,250,0.055) 0%, rgba(123,79,255,0.03) 50%, transparent 75%)",
+          pointerEvents: "none", zIndex: 1,
+          animation: "nebulaDrift 25s ease-in-out infinite alternate",
+        }} />
+      )}
 
       {/* ══════════════════════════════════════
-          SIDEBAR — 240px fixed
+          SIDEBAR — 240px fixed — hidden when headless (new shell provides one)
       ══════════════════════════════════════ */}
+      {!headless && (
       <aside
         className="glass-deep fixed left-0 top-0 bottom-0 flex flex-col z-40"
         style={{ width: sidebarOpen ? 240 : 0, minWidth: 0, overflowY: sidebarOpen ? "auto" : "hidden", overflowX: "hidden", transition: "width 0.28s cubic-bezier(0.16,1,0.3,1)", visibility: sidebarOpen ? "visible" : "hidden" }}
@@ -1272,13 +1300,16 @@ export default function Dashboard() {
           </div>
         </div>
       </aside>
+      )}
 
       {/* ══════════════════════════════════════
-          MAIN CONTENT — offset 240px
+          MAIN CONTENT — offset 240px (or 0 when headless, since new shell
+          provides its own sidebar)
       ══════════════════════════════════════ */}
-      <main className="flex-1 flex flex-col min-h-screen" style={{ marginLeft: sidebarOpen ? 240 : 0, transition: "margin-left 0.28s cubic-bezier(0.16,1,0.3,1)", position: "relative", zIndex: 2 }}>
+      <main className="flex-1 flex flex-col min-h-screen" style={{ marginLeft: headless ? 0 : (sidebarOpen ? 240 : 0), transition: "margin-left 0.28s cubic-bezier(0.16,1,0.3,1)", position: "relative", zIndex: 2 }}>
 
-        {/* ── Sticky topbar ── */}
+        {/* ── Sticky topbar — hidden when headless (new shell provides one) ── */}
+        {!headless && (
         <div
           className="glass-nav sticky top-0 z-30 flex items-center gap-3 px-5"
           style={{ height: 68, minHeight: 68, paddingTop: 4, paddingBottom: 4 }}
@@ -1510,8 +1541,18 @@ export default function Dashboard() {
             />
           )}
         </div>
+        )}
+        {/* end headless-hidden top bar */}
 
-
+        {/* ── Headless-mode URL input — when embedded, surface a compact
+            URL input inside main so the user can still analyze from here
+            in case they didn't use the new shell's TopBar. The analyze()
+            call below is the same pipeline. ── */}
+        {headless && (
+          <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <UrlInput onAnalyze={analyze} loading={loading} status={status} error={error} />
+          </div>
+        )}
 
         {/* ── Instagram accuracy notice — full-width, below topbar ── */}
         {inputTab === "instagram" && (

@@ -98,12 +98,14 @@ export default function NewDashboard() {
       .catch(() => {});
   }, []);
 
-  const handleAnalyze = () => {
-    // Switching to the forecast route hands control to the legacy Dashboard,
-    // which has its own URL input + full analyze pipeline. The TopBar's URL
-    // is effectively a teaser — the RM will paste the same URL into the
-    // legacy dashboard once. Future pass: hoist the analyze flow and feed
-    // URL through context.
+  const handleAnalyze = (url: string) => {
+    // Hand the URL off to the embedded headless legacy Dashboard via a
+    // sessionStorage signal. When it mounts (or if it's already mounted
+    // and we're just triggering again), it reads+clears the key and calls
+    // analyze() directly. Avoids prop-drilling through a 2,300-line file.
+    if (typeof window !== "undefined" && url) {
+      window.sessionStorage.setItem("ve_pending_analyze", url);
+    }
     setRoute("forecast");
   };
 
@@ -129,7 +131,7 @@ export default function NewDashboard() {
           {route === "calendar"  && <CalendarPage />}
           {route === "libraries" && <LibrariesPage />}
           {route === "reference" && <ReferencePoolPage />}
-          {route === "forecast"  && <Dashboard />}
+          {route === "forecast"  && <Dashboard headless />}
           {route === "history"   && <LandingPage />}
           {route === "calibration" && <CalibrationStub />}
         </div>
