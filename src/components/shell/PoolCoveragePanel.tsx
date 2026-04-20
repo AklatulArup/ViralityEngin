@@ -222,11 +222,25 @@ export function CoverageBar({ label, sub, color, cur, target }: { label: string;
   const met = cur >= target;
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 5 }}>
-        <span style={{ width: 5, height: 5, borderRadius: 99, background: color }} />
-        <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: T.ink }}>{label}</span>
-        <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint }}>· {sub}</span>
-        <span style={{ marginLeft: "auto", fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: met ? T.green : T.inkDim }}>
+      {/* Two-group layout: label + descriptor on the left (can ellipsize),
+          count on the right (fixed, won't wrap). Previously the header row
+          used a single flex where descriptor pushed the count onto a second
+          line at narrow widths — making "Workable minimum — engine
+          functions" span two lines awkwardly. */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 5, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0, flex: 1, overflow: "hidden" }}>
+          <span style={{ width: 5, height: 5, borderRadius: 99, background: color, flexShrink: 0, alignSelf: "center" }} />
+          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: T.ink, whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
+          <span style={{
+            fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0,
+          }}>· {sub}</span>
+        </div>
+        <span style={{
+          fontFamily: "IBM Plex Mono, monospace", fontSize: 11,
+          color: met ? T.green : T.inkDim,
+          whiteSpace: "nowrap", flexShrink: 0, fontVariantNumeric: "tabular-nums",
+        }}>
           {met && "✓ "}{fmtCount(cur)} / {fmtCount(target)}
         </span>
       </div>

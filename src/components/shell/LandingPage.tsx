@@ -17,7 +17,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { T, PLATFORMS } from "@/lib/design-tokens";
 import { computePoolStats, type MinimalEntry, type PlatformRow } from "@/lib/pool-stats";
 import type { Platform } from "@/lib/forecast";
-import { fmtCompact } from "@/lib/number-format";
+import { fmtCount, fmtCompact } from "@/lib/number-format";
 import {
   PoolCoveragePanel,
   V5SectionHeader,
@@ -55,13 +55,17 @@ export default function LandingPage() {
     const avgEng = eng.length > 0 ? eng.reduce((s, v) => s + v, 0) / eng.length : 0;
     const highVRS = entries.filter(e => Number(e.metrics?.vrsScore ?? 0) >= 80).length;
     const totalViews = entries.reduce((s, e) => s + Number(e.metrics?.views ?? 0), 0);
+    // Pool depth + creator counts use fmtCount (precise) to match the numbers
+    // shown in the Pool Coverage header. Only intrinsically-large values
+    // (total views, historical reach) use fmtCompact — they'd be noise at
+    // full precision.
     return [
-      { label: "Pool depth",              value: `${fmtCompact(stats.totalEntries)} items`,                                      color: T.red,    active: hasEntries },
-      { label: "Unique creators",         value: `${fmtCompact(stats.totalCreators)}`,                                            color: T.red,    active: stats.totalCreators > 0 },
+      { label: "Pool depth",              value: `${fmtCount(stats.totalEntries)} items`,                                       color: T.red,    active: hasEntries },
+      { label: "Unique creators",         value: `${fmtCount(stats.totalCreators)}`,                                             color: T.red,    active: stats.totalCreators > 0 },
       { label: "Total reach",             value: totalViews > 0 ? `${fmtCompact(totalViews)} views` : "—",                       color: T.purple, active: totalViews > 0 },
       { label: "Avg VRS",                 value: avgVRS > 0 ? `${avgVRS.toFixed(0)}/100` : "—",                                  color: T.amber,  active: avgVRS >= 60 },
       { label: "Avg engagement",          value: avgEng > 0 ? `${avgEng.toFixed(1)}%` : "—",                                     color: T.amber,  active: avgEng > 0 },
-      { label: "High-VRS content (≥80)",  value: `${highVRS} videos`,                                                             color: T.green,  active: highVRS > 0 },
+      { label: "High-VRS content (≥80)",  value: `${fmtCount(highVRS)} videos`,                                                   color: T.green,  active: highVRS > 0 },
     ];
   }, [entries, stats]);
 
@@ -142,6 +146,14 @@ function LiveSignalFeed({ signals }: { signals: Array<{ label: string; value: st
 // n=2 would be a lie.
 
 const MIN_SAMPLE = 20;
+
+// Learning Accuracy table grid. 6 columns: Platform | MdAPE | Cov. | Dir. |
+// Confidence bar (fills) | Status pill. Fixed widths sum to 388px + 50px gap
+// = 438px minimum so the Confidence `1fr` column retains room for its bar
+// at any main-column width ≥ ~600px. Previously the layout (140/80/80/80
+// /1fr/120) needed ~720px minimum, which overflowed at 1131px viewports
+// and stretched each row to 133px tall.
+const ACCURACY_GRID_COLS = "110px 56px 50px 50px minmax(120px, 1fr) 110px";
 // Per-platform maturity windows (days) used by the collect-outcomes cron.
 const MATURITY_DAYS: Record<string, number> = {
   youtube:       90,
@@ -241,11 +253,14 @@ function LearningAccuracy() {
       </div>
 
       <div style={{ border: `1px solid ${T.line}`, borderRadius: 4, overflow: "hidden" }}>
-        {/* Header */}
+        {/* Header — columns tightened from the V1 values (140/80/80/80/1fr/120)
+            so the Confidence `1fr` column always has ≥120px of runway even at
+            narrow viewports (1024-1280). Anything smaller than 1024 is out of
+            scope — RM tool runs on desktop. */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "140px 80px 80px 80px 1fr 120px",
-          columnGap: 14,
+          gridTemplateColumns: ACCURACY_GRID_COLS,
+          columnGap: 10,
           padding: "9px 14px",
           background: T.bgRow,
           borderBottom: `1px solid ${T.line}`,
@@ -257,8 +272,8 @@ function LearningAccuracy() {
         }}>
           <div>Platform</div>
           <div style={{ textAlign: "right" }}>MdAPE</div>
-          <div style={{ textAlign: "right" }}>80% cov.</div>
-          <div style={{ textAlign: "right" }}>Direction</div>
+          <div style={{ textAlign: "right" }}>Cov.</div>
+          <div style={{ textAlign: "right" }}>Dir.</div>
           <div>Confidence</div>
           <div style={{ textAlign: "right" }}>Status</div>
         </div>
@@ -353,8 +368,8 @@ function AccuracyRow({
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: "140px 80px 80px 80px 1fr 120px",
-      columnGap: 14,
+      gridTemplateColumns: ACCURACY_GRID_COLS,
+      columnGap: 10,
       padding: "11px 14px",
       alignItems: "center",
       fontFamily: "IBM Plex Mono, monospace",
@@ -362,11 +377,21 @@ function AccuracyRow({
       color: T.inkDim,
       borderBottom: last ? "none" : `1px solid ${T.line}`,
     }}>
-      {/* Platform */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      {/* Platform — short code + full label on hover. The label is kept as a
+          tooltip (title attr) so it's still discoverable without stretching
+          the column to fit "YouTube Long-form". */}
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+        title={pl.label}
+      >
         <span style={{ width: 6, height: 6, borderRadius: 99, background: pl.color, flexShrink: 0 }} />
-        <span style={{ color: T.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {pl.label}
+        <span style={{ color: pl.color, fontWeight: 600, flexShrink: 0 }}>{pl.code}</span>
+        <span style={{
+          color: T.inkFaint, fontSize: 10,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          minWidth: 0,
+        }}>
+          {pl.short}
         </span>
       </div>
       {/* MdAPE */}

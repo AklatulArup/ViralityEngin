@@ -19,6 +19,7 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { T, PLATFORMS, MODES, type ShellRoute } from "@/lib/design-tokens";
 import type { Platform } from "@/lib/forecast";
+import { fmtCount } from "@/lib/number-format";
 
 export interface PoolStats {
   videos:   number;
@@ -152,10 +153,10 @@ export default function Sidebar({ route, setRoute, platform, setPlatform, active
 
         <SideSection title="Reference Pool">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: "0 16px" }}>
-            <PoolStat value={fmtCompact(pool.videos)}   label="videos"    color={T.green} />
-            <PoolStat value={fmtCompact(pool.creators)} label="creators"  color={T.blue} />
-            <PoolStat value={fmtCompact(pool.shorts)}   label="shorts"    color={T.pink} />
-            <PoolStat value={fmtCompact(pool.keywords)} label="keywords"  color={T.amber} />
+            <PoolStat value={fmtCount(pool.videos)}     label="videos"    color={T.green} />
+            <PoolStat value={fmtCount(pool.creators)}   label="creators"  color={T.blue} />
+            <PoolStat value={fmtCount(pool.shorts)}     label="shorts"    color={T.pink} />
+            <PoolStat value={fmtCount(pool.keywords)}   label="keywords"  color={T.amber} />
           </div>
         </SideSection>
 
@@ -303,8 +304,6 @@ const monoLabelStyle: React.CSSProperties = {
   marginTop: 2,
 };
 
-function fmtCompact(n: number): string {
-  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1).replace(/\.0$/, "") + "K";
-  return String(n);
-}
+// fmtCompact removed — Sidebar pool tiles now use fmtCount (precise) to
+// match the Pool Coverage header's "2,219" format. Previously the tiles
+// showed "2.2K" while the header showed "2,219" for the same value.

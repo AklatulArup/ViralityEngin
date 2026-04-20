@@ -13,6 +13,10 @@ import React, { useState } from "react";
 import { T, PLATFORMS } from "@/lib/design-tokens";
 import type { Platform } from "@/lib/forecast";
 
+// URL input focus — brighten border to the active platform's accent color so
+// the field reads as an actionable target. At rest it uses T.lineMid (not T.line)
+// so the border is visible against the dark T.bgDeep top-bar background.
+
 interface TopBarProps {
   platform:  Platform;
   onAnalyze: (url: string) => void;
@@ -22,6 +26,7 @@ interface TopBarProps {
 export default function TopBar({ platform, onAnalyze, onMenu }: TopBarProps) {
   const p = PLATFORMS[platform];
   const [url, setUrl] = useState("");
+  const [focus, setFocus] = useState(false);
 
   const submit = () => {
     const trimmed = url.trim();
@@ -54,13 +59,19 @@ export default function TopBar({ platform, onAnalyze, onMenu }: TopBarProps) {
         onSubmit={(e) => { e.preventDefault(); submit(); }}
         style={{
           flex: 1, position: "relative", display: "flex", alignItems: "center",
-          background: T.bgPanel, border: `1px solid ${T.line}`, borderRadius: 4,
+          background: T.bgPanel,
+          border: `1px solid ${focus ? p.color : T.lineMid}`,
+          boxShadow: focus ? `0 0 0 2px ${p.color}22` : "none",
+          borderRadius: 4,
+          transition: "border-color 0.15s ease, box-shadow 0.15s ease",
         }}
       >
-        <span style={{ padding: "0 10px", color: T.inkFaint, fontSize: 12 }}>⌕</span>
+        <span style={{ padding: "0 10px", color: focus ? p.color : T.inkFaint, fontSize: 12 }}>⌕</span>
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
+          onFocus={() => setFocus(true)}
+          onBlur={() => setFocus(false)}
           placeholder={`Paste a ${p.short} URL, channel @handle, or video link…`}
           style={{
             flex: 1, padding: "9px 4px", background: "transparent", border: "none",
