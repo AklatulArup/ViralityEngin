@@ -71,9 +71,21 @@ export default function LandingPage() {
     for (const e of entries) {
       const p = e?.platform;
       if (!p || !(p in byPlatform)) continue;
-      byPlatform[p].count += 1;
+      // YouTube entries are ingested with platform="youtube" regardless of
+      // short vs long-form; only `videoFormat` or `durationSeconds` distinguish
+      // them. Re-bucket a YouTube entry into `youtube_short` when it's flagged
+      // or has a short duration, so YTS in the Pool Coverage panel stops
+      // showing 0 while Sidebar "Shorts" shows hundreds.
+      let bucket: Platform = p;
+      if (p === "youtube") {
+        const dRaw = (e as unknown as { durationSeconds?: number }).durationSeconds;
+        const fmt  = (e as unknown as { videoFormat?: string }).videoFormat;
+        const d    = typeof dRaw === "number" ? dRaw : 0;
+        if (fmt === "short" || (d > 0 && d <= 60)) bucket = "youtube_short";
+      }
+      byPlatform[bucket].count += 1;
       const handle = e.channelName ?? e.name;
-      if (handle) byPlatform[p].creators.add(handle);
+      if (handle) byPlatform[bucket].creators.add(handle);
     }
     const total = Object.values(byPlatform).reduce((s, v) => s + v.count, 0);
     const allCreators = new Set<string>();
