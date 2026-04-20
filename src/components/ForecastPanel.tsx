@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { forecast, projectAtDate, PLATFORM_CONFIG, type ManualInputs, type Platform, type DataSource, type DateProjection } from "@/lib/forecast";
 import { T, PLATFORMS as SHELL_PLATFORMS } from "@/lib/design-tokens";
 import type { ConformalTable } from "@/lib/conformal";
@@ -79,16 +79,21 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   const [thumbnailCTR, setThumbnailCTR] = useState<{ estimatedCTR: number; totalPoints: number; maxPoints: number; rationale: string; ctrConfidence: string } | null>(null);
   const [hookStrength, setHookStrength] = useState<{ totalPoints: number; maxPoints: number; percent: number; dominantFormula: string; confidence: string; rationale: string; estimatedCompletionPct: number; estimatedHold3sPct: number } | null>(null);
 
-  // Fetch velocity time series for this video from the tracker cron store
+  // Fetch velocity time series for this video from the tracker cron store.
+  // AbortController guards against out-of-order resolution when the user
+  // pastes multiple URLs in quick succession — previously a slow fetch for
+  // video A could resolve AFTER video B's fetch and overwrite B's fresh data.
   const [velocitySamples, setVelocitySamples] = useState<Array<{ ageHours: number; views: number; velocity: number; acceleration: number }>>([]);
   useEffect(() => {
     if (!video.id || typeof window === "undefined") return;
-    fetch(`/api/forecast/velocity?videoId=${encodeURIComponent(video.id)}`)
+    const ctrl = new AbortController();
+    fetch(`/api/forecast/velocity?videoId=${encodeURIComponent(video.id)}`, { signal: ctrl.signal })
       .then((r) => r.ok ? r.json() : null)
       .then((d) => {
         if (d?.ok && Array.isArray(d.samples)) setVelocitySamples(d.samples);
       })
       .catch(() => {});
+    return () => ctrl.abort();
   }, [video.id]);
 
   // Thumbnail-CTR predictor (YouTube / Shorts only). Gemini Vision scores
@@ -220,10 +225,17 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
         const cData = await cRes.json();
         if (!cData?.ok || !Array.isArray(cData.comments) || cData.comments.length === 0) return;
 
+        // Pass (platform, postId) so the endpoint can KV-cache the result.
+        // Re-forecasting the same video skips the Gemini / Groq call entirely
+        // on a cache hit — saves one request from your daily quota per repeat.
         const sRes = await fetch("/api/forecast/sentiment", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ comments: cData.comments }),
+          body: JSON.stringify({
+            comments: cData.comments,
+            platform,
+            postId:   video.id,
+          }),
         });
         if (!sRes.ok) return;
         const sData = await sRes.json();
@@ -286,22 +298,30 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
     };
   }, []);
 
-  // Tuning overrides from admin page — applied on every forecast
+  // Tuning overrides from admin page — applied on every forecast. If the
+  // fetch fails we track that fact (configOverridesFailed) so the panel can
+  // surface a visible warning instead of silently using defaults — otherwise
+  // an RM would have no clue their admin-set tuning isn't being applied.
   const [configOverrides, setConfigOverrides] = useState<Record<string, Record<string, number>>>({});
+  const [configOverridesFailed, setConfigOverridesFailed] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     fetch("/api/forecast/tuning")
-      .then(r => r.ok ? r.json() : null)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(d => {
-        if (!d?.ok || !Array.isArray(d.overrides)) return;
+        if (!d?.ok || !Array.isArray(d.overrides)) {
+          setConfigOverridesFailed(true);
+          return;
+        }
         const byPlatform: Record<string, Record<string, number>> = {};
         for (const o of d.overrides as Array<{ platform: string; parameter: string; newValue: number }>) {
           if (!byPlatform[o.platform]) byPlatform[o.platform] = {};
           byPlatform[o.platform][o.parameter] = o.newValue;
         }
         setConfigOverrides(byPlatform);
+        setConfigOverridesFailed(false);
       })
-      .catch(() => {});
+      .catch(() => { setConfigOverridesFailed(true); });
   }, []);
 
   // Conformal quantile table — replaces hand-tuned upside/downside bands with
@@ -424,9 +444,13 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
       setInputsOpen(true);
       const fieldCount = Object.keys(numericOnly).length;
       const rows       = typeof data.rowsParsed === "number" ? data.rowsParsed : 0;
+      const warnings   = Array.isArray(data.warnings) ? data.warnings as string[] : [];
+      const warningTail = warnings.length > 0 ? ` ⚠ ${warnings[0]}` : "";
       setCsvStatus({
-        kind: "done",
-        message: `Imported ${rows} rows · filled ${fieldCount} field${fieldCount === 1 ? "" : "s"} · saved to creator memory.`,
+        // If any rows were dropped for column-count mismatch the RM sees the
+        // warning inline — silently losing data is worse than a visible hint.
+        kind: warnings.length > 0 ? "error" : "done",
+        message: `Imported ${rows} rows · filled ${fieldCount} field${fieldCount === 1 ? "" : "s"} · saved to creator memory.${warningTail}`,
       });
     } catch (e) {
       setCsvStatus({ kind: "error", message: e instanceof Error ? e.message : "Network error." });
@@ -551,11 +575,22 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   }, [video.publishedAt]);
 
   const [targetDate, setTargetDate] = useState<string>(defaultTargetDate);
+  const prevDefaultRef = useRef<string>(defaultTargetDate);
 
-  // Reset the target date whenever the analyzed video changes so the picker
-  // doesn't stay stuck at the previous video's publish+30d default
+  // Reset the target date only when the default changes AND the user hasn't
+  // manually picked something different. If the user has chosen a custom
+  // projection date, preserve it across re-renders. Previously the effect
+  // unconditionally clobbered the picker every time default changed, wiping
+  // the RM's selection on every re-render of the video prop.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setTargetDate(defaultTargetDate); }, [defaultTargetDate]);
+  useEffect(() => {
+    if (defaultTargetDate === prevDefaultRef.current) return; // no change
+    if (targetDate === prevDefaultRef.current) {
+      // user hadn't customized — fine to re-sync
+      setTargetDate(defaultTargetDate);
+    }
+    prevDefaultRef.current = defaultTargetDate;
+  }, [defaultTargetDate, targetDate]);
 
   const dateProjection = useMemo<DateProjection | null>(() => {
     if (!targetDate) return null;
@@ -620,8 +655,12 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   // labelled "Evergreen". The display helper now takes the video's age in
   // days so early-life videos get "Active distribution" / "Audience
   // expansion" copy instead of the long-tail "Evergreen" bucket.
+  // Math.floor so a video at exactly 1.9999 days doesn't get the "0-2d
+  // Initial distribution" label when the intent of the band boundaries is
+  // whole-day-inclusive. 1d = "Initial distribution"; 2d → "Audience
+  // expansion"; millisecond-precision rounding was giving surprising labels.
   const ageDaysForTier = video.publishedAt
-    ? Math.max(0, (Date.now() - new Date(video.publishedAt).getTime()) / 86_400_000)
+    ? Math.max(0, Math.floor((Date.now() - new Date(video.publishedAt).getTime()) / 86_400_000))
     : 0;
   const tierInfo = tierDisplay(result.lifecycleTier, platform, tokens, ageDaysForTier);
 
@@ -632,6 +671,18 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   return (
     <div style={panelStyle}>
       <main style={mainColStyle}>
+
+        {configOverridesFailed && (
+          <div style={{
+            fontFamily: "IBM Plex Mono, monospace", fontSize: 11,
+            padding: "8px 12px", borderRadius: 4,
+            background: "rgba(245,158,11,0.08)",
+            border: "1px solid rgba(245,158,11,0.3)",
+            color: "#F59E0B",
+          }}>
+            ⚠ Could not load admin tuning overrides — forecast is using hand-tuned platform defaults. Check <span style={{ color: "#E8E6E1" }}>/api/forecast/tuning</span> and the admin page.
+          </div>
+        )}
 
         {/* ── V5 header row ───────────────────────────────────────── */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

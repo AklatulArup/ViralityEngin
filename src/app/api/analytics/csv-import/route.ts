@@ -121,7 +121,17 @@ const INSTAGRAM_MAP: Record<string, ColumnMap> = {
 // CRLF/LF line endings. No external dependency. We never call this on
 // files bigger than a few thousand rows so perf isn't a concern.
 
-function parseCsv(text: string): CsvRow[] {
+interface ParseResult {
+  rows:         CsvRow[];
+  headers:      string[];
+  droppedCount: number;    // rows with column-count mismatch (malformed CSV hints)
+  droppedRowNumbers: number[];  // 1-indexed row numbers for the first 10 dropped, for surfacing to the RM
+}
+
+function parseCsv(text: string): ParseResult {
+  // Strip UTF-8 BOM if present (common in Excel / Meta Business Suite exports).
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
   const rows: string[][] = [];
   let cur: string[] = [];
   let field = "";
@@ -143,15 +153,32 @@ function parseCsv(text: string): CsvRow[] {
   }
   if (field.length > 0 || cur.length > 0) { cur.push(field); rows.push(cur); }
 
-  if (rows.length === 0) return [];
+  if (rows.length === 0) return { rows: [], headers: [], droppedCount: 0, droppedRowNumbers: [] };
   const headers = rows[0].map(h => h.trim());
-  return rows.slice(1)
-    .filter(r => r.length === headers.length || r.length === headers.length + 1)
-    .map(r => {
+
+  const kept: CsvRow[] = [];
+  const droppedRowNumbers: number[] = [];
+  let droppedCount = 0;
+
+  // Drop rows whose length doesn't match the header count. A trailing empty
+  // column (length = headers.length + 1) is tolerated — common in CSV exports
+  // with stray trailing comma. Completely empty rows are silently skipped
+  // (they're not data loss).
+  for (let ri = 1; ri < rows.length; ri++) {
+    const r = rows[ri];
+    const isEmpty = r.length === 0 || (r.length === 1 && r[0].trim() === "");
+    if (isEmpty) continue;
+    if (r.length === headers.length || r.length === headers.length + 1) {
       const obj: CsvRow = {};
       for (let j = 0; j < headers.length; j++) obj[headers[j]] = (r[j] ?? "").trim();
-      return obj;
-    });
+      kept.push(obj);
+    } else {
+      droppedCount++;
+      if (droppedRowNumbers.length < 10) droppedRowNumbers.push(ri + 1); // 1-indexed, header = row 1
+    }
+  }
+
+  return { rows: kept, headers, droppedCount, droppedRowNumbers };
 }
 
 // ─── HEADER NORMALISER ────────────────────────────────────────────────────
@@ -268,13 +295,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, reason: "csv_required" }, { status: 400 });
   }
 
-  const rows = parseCsv(csv);
+  const parsed = parseCsv(csv);
+  const rows = parsed.rows;
   if (rows.length === 0) {
-    return NextResponse.json({ ok: false, reason: "no_rows_in_csv" });
+    return NextResponse.json({
+      ok: false,
+      reason: "no_rows_in_csv",
+      droppedCount: parsed.droppedCount,
+      droppedRowNumbers: parsed.droppedRowNumbers,
+    });
+  }
+
+  // Surface column-count mismatches so RMs know silent data loss happened.
+  // A malformed cell with an unescaped comma would otherwise drop the row
+  // with no feedback.
+  const warnings: string[] = [];
+  if (parsed.droppedCount > 0) {
+    warnings.push(
+      `${parsed.droppedCount} row${parsed.droppedCount === 1 ? "" : "s"} dropped due to column-count mismatch ` +
+      `(expected ${parsed.headers.length} columns). First affected row numbers: ${parsed.droppedRowNumbers.join(", ")}.`,
+    );
   }
 
   const map = platform === "tiktok" ? TIKTOK_MAP : INSTAGRAM_MAP;
-  const detectedHeaders = Object.keys(rows[0]);
+  const detectedHeaders = parsed.headers;
   const perRow = rows.map(r => extractRow(r, map));
 
   const matchedFields = new Set<string>();
@@ -309,12 +353,14 @@ export async function POST(req: NextRequest) {
   };
 
   return NextResponse.json({
-    ok:         true,
+    ok:           true,
     platform,
     handle,
-    rowsParsed: result.rowsParsed,
-    aggregated: result.aggregated,
-    matched:    result.sampleMatched,
+    rowsParsed:   result.rowsParsed,
+    aggregated:   result.aggregated,
+    matched:      result.sampleMatched,
+    droppedCount: parsed.droppedCount,
+    warnings,
     record,
   });
 }

@@ -117,7 +117,10 @@ export default function NewDashboard() {
     // The event path fires synchronously so a listener installed in a
     // currently-mounted Dashboard picks it up. The sessionStorage backup
     // covers the case where the route switch remounts Dashboard fresh.
-    window.sessionStorage.setItem("ve_pending_analyze", url);
+    // Pair the URL with a timestamp so Dashboard can discard stale entries.
+    // Without this a user could click Analyze, navigate to Landing, come back
+    // 5 minutes later, and Dashboard would cold-mount and re-run the old URL.
+    window.sessionStorage.setItem("ve_pending_analyze", JSON.stringify({ url, ts: Date.now() }));
     window.dispatchEvent(new CustomEvent("ve:analyze-url", { detail: { url } }));
     setRoute("forecast");
   };

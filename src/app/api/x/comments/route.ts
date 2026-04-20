@@ -32,7 +32,12 @@ export async function GET(req: NextRequest) {
     }
 
     // Strip leading @ and any URL fragments, keep the raw screen_name.
-    const authorHandle = authorRaw.replace(/^@/, "").split(/[\/\s?]/)[0];
+    // Validate against Twitter's handle format (alphanumerics + underscore,
+    // 1-15 chars) before interpolating into the Twitter advanced-search
+    // query — prevents query injection via crafted URL params like
+    // "from:someone_else" or quoted strings.
+    const candidate = authorRaw.replace(/^@/, "").split(/[\/\s?]/)[0];
+    const authorHandle = /^[A-Za-z0-9_]{1,15}$/.test(candidate) ? candidate : "";
 
     const token =
       process.env.APIFY_TOKEN_TWITTER   ||
@@ -62,7 +67,8 @@ export async function GET(req: NextRequest) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
-        cache: "force-cache",
+        // X moves faster than TT/IG so force-cache would be even staler.
+        cache: "no-store",
       },
     );
 

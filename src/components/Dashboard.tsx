@@ -210,10 +210,26 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
   // Path A: cold mount
   useEffect(() => {
     if (!headless || typeof window === "undefined") return;
-    const pending = window.sessionStorage.getItem("ve_pending_analyze");
-    if (!pending) return;
+    const raw = window.sessionStorage.getItem("ve_pending_analyze");
+    if (!raw) return;
     window.sessionStorage.removeItem("ve_pending_analyze");
-    const t = setTimeout(() => { analyzeRef.current(pending).catch(() => {}); }, 0);
+    // Format: JSON { url, ts } — with a 10s staleness guard so a user who
+    // navigated away and came back doesn't re-trigger an old analyze. Also
+    // supports legacy plain-string entries for backward compat (treated
+    // as fresh since we can't know their age).
+    let pending: string | null = null;
+    try {
+      const parsed = JSON.parse(raw) as { url?: string; ts?: number };
+      if (parsed && typeof parsed.url === "string" && typeof parsed.ts === "number") {
+        const ageMs = Date.now() - parsed.ts;
+        if (ageMs >= 0 && ageMs <= 10_000) pending = parsed.url;
+      }
+    } catch {
+      // Legacy plain-string entry — accept.
+      pending = raw;
+    }
+    if (!pending) return;
+    const t = setTimeout(() => { analyzeRef.current(pending!).catch(() => {}); }, 0);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headless]);

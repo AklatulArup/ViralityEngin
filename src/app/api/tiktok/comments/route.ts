@@ -53,7 +53,11 @@ export async function GET(req: NextRequest) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
-        cache: "force-cache",
+        // No force-cache: Apify actor runs are non-deterministic (comment
+        // order, actor load) and caching the response by body hash would
+        // freeze stale top-comment batches for an hour. `revalidate = 3600`
+        // at module scope governs the data-cache layer instead.
+        cache: "no-store",
       },
     );
 

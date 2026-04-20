@@ -35,7 +35,7 @@ export default function CalibrationPage() {
   }, []);
 
   if (loading) {
-    return <PageShell><div style={{ color: "#6B6964" }}>Loading calibration data…</div></PageShell>;
+    return <PageShell><div style={{ color: "#8A8883" }}>Loading calibration data…</div></PageShell>;
   }
 
   if (!data?.ok) {
@@ -96,14 +96,14 @@ export default function CalibrationPage() {
             ))}
           </div>
         ) : (
-          <div style={{ fontSize: 12, color: "#6B6964", fontStyle: "italic" }}>No data yet.</div>
+          <div style={{ fontSize: 12, color: "#8A8883", fontStyle: "italic" }}>No data yet.</div>
         )}
       </section>
 
       {report && report.byScoreBand && report.byScoreBand.length > 0 && report.sampleSize > 0 && (
         <section style={{ marginBottom: 28 }}>
           <SectionHeading>Error by score band</SectionHeading>
-          <div style={{ fontSize: 11, color: "#6B6964", marginBottom: 10 }}>Median absolute percentage error across score ranges. Flat is good; big swings suggest the score → multiplier curve is miscalibrated.</div>
+          <div style={{ fontSize: 11, color: "#8A8883", marginBottom: 10 }}>Median absolute percentage error across score ranges. Flat is good; big swings suggest the score → multiplier curve is miscalibrated.</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
             {report.byScoreBand.map((b, i) => (
               <BandCard key={i} label={`Score ${b.min}–${b.max}`} n={b.n} mdape={b.medianAPE} />
@@ -115,7 +115,7 @@ export default function CalibrationPage() {
       {report && report.byAgeBand && report.byAgeBand.length > 0 && report.sampleSize > 0 && (
         <section style={{ marginBottom: 28 }}>
           <SectionHeading>Error by age at forecast time</SectionHeading>
-          <div style={{ fontSize: 11, color: "#6B6964", marginBottom: 10 }}>How accurate we are at different stages of a post&apos;s life. Younger posts should have higher error; that&apos;s normal.</div>
+          <div style={{ fontSize: 11, color: "#8A8883", marginBottom: 10 }}>How accurate we are at different stages of a post&apos;s life. Younger posts should have higher error; that&apos;s normal.</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
             {report.byAgeBand.map((b, i) => (
               <BandCard key={i} label={ageLabel(b.min, b.max)} n={b.n} mdape={b.medianAPE} />
@@ -130,7 +130,7 @@ export default function CalibrationPage() {
       {report && report.worstPredictions && report.worstPredictions.length > 0 && (
         <section>
           <SectionHeading>Worst 5 predictions</SectionHeading>
-          <div style={{ fontSize: 11, color: "#6B6964", marginBottom: 10 }}>For debugging. These are the snapshots where our prediction was furthest off.</div>
+          <div style={{ fontSize: 11, color: "#8A8883", marginBottom: 10 }}>For debugging. These are the snapshots where our prediction was furthest off.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {report.worstPredictions.map((w, i) => (
               <div key={w.id} style={worstRowStyle}>
@@ -205,7 +205,7 @@ function PlatformCard({ platform, report }: { platform: Platform; report: Calibr
           <Row label="Bias"      value={`${report.meanSignedError > 0 ? "+" : ""}${(report.meanSignedError * 100).toFixed(0)}%`} />
         </div>
       ) : (
-        <div style={{ fontSize: 11.5, color: "#6B6964", fontStyle: "italic" }}>No matured samples yet</div>
+        <div style={{ fontSize: 11.5, color: "#8A8883", fontStyle: "italic" }}>No matured samples yet</div>
       )}
     </div>
   );

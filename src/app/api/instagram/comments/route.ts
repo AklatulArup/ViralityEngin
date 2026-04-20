@@ -51,7 +51,9 @@ export async function GET(req: NextRequest) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
-        cache: "force-cache",
+        // See tiktok/comments route — force-cache on non-deterministic
+        // Apify actor runs returns stale comment sets.
+        cache: "no-store",
       },
     );
 
