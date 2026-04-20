@@ -249,30 +249,64 @@ function PlatformTableRow({ row, last }: { row: PlatformRow; last: boolean }) {
 
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: "110px 70px 80px 70px 90px 1fr 120px",
-      padding: "9px 12px", alignItems: "center",
+      ...tableRowGrid,
+      padding: "11px 16px", alignItems: "center",
       fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: T.inkDim,
       borderBottom: last ? "none" : `1px solid ${T.line}`,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ width: 6, height: 6, borderRadius: 99, background: pl.color }} />
+      {/* Platform */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: pl.color, flexShrink: 0 }} />
         <span style={{ color: pl.color, fontWeight: 600 }}>{pl.code}</span>
-        <span style={{ color: T.inkFaint, fontSize: 10 }}>{pl.short}</span>
+        <span style={{ color: T.inkFaint, fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {pl.short}
+        </span>
       </div>
-      <div style={{ textAlign: "right", color: row.count > 0 ? T.ink : T.inkFaint }}>
+
+      {/* Videos */}
+      <div style={{ textAlign: "right", color: row.count > 0 ? T.ink : T.inkFaint, fontVariantNumeric: "tabular-nums" }}>
         {row.count.toLocaleString()}
       </div>
-      <div style={{ textAlign: "right" }}>{row.creators.toLocaleString()}</div>
-      <div style={{ textAlign: "right" }}>
+
+      {/* Creators */}
+      <div style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+        {row.creators.toLocaleString()}
+      </div>
+
+      {/* % of pool */}
+      <div style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
         {row.pct > 0 ? `${row.pct.toFixed(1)}%` : "—"}
       </div>
-      <div style={{ color: statusColor }}>{statusText}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+
+      {/* Status — rendered as a subtle pill so it reads as its own token */}
+      <div>
+        <span style={{
+          display: "inline-block",
+          padding: "2px 8px", borderRadius: 3,
+          background: `${statusColor}14`,
+          border: `1px solid ${statusColor}33`,
+          color: statusColor,
+          fontSize: 10, letterSpacing: 0.4,
+          whiteSpace: "nowrap",
+        }}>
+          {statusText}
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ display: "flex", alignItems: "center" }}>
         <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 99, overflow: "hidden" }}>
           <div style={{ width: `${pctToNext * 100}%`, height: "100%", background: pl.color, opacity: 0.7 }} />
         </div>
       </div>
-      <div style={{ textAlign: "right", color: row.nextTarget === null ? T.green : T.inkFaint }}>
+
+      {/* Next target */}
+      <div style={{
+        textAlign: "right",
+        color: row.nextTarget === null ? T.green : T.inkFaint,
+        fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
+      }}>
         {nextText}
       </div>
     </div>
@@ -475,9 +509,19 @@ function V5Cell({ label, value, sub, big, color }: { label: string; value: strin
   );
 }
 
+// Shared grid template — used by header + every row so columns stay aligned.
+// Wider columns than v1 (which was "110px 70px 80px 70px 90px 1fr 120px") plus
+// an explicit columnGap so the `%` number no longer butts straight against
+// the Status pill.
+const tableRowGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "150px 90px 90px 80px 110px 1fr 140px",
+  columnGap: 18,
+};
+
 const tableHeaderStyle: React.CSSProperties = {
-  display: "grid", gridTemplateColumns: "110px 70px 80px 70px 90px 1fr 120px",
-  padding: "8px 12px", background: T.bgRow,
+  ...tableRowGrid,
+  padding: "9px 16px", background: T.bgRow,
   fontFamily: "IBM Plex Mono, monospace", fontSize: 9, letterSpacing: 1.2,
   textTransform: "uppercase", color: T.inkFaint,
   borderBottom: `1px solid ${T.line}`,
