@@ -92,17 +92,6 @@ export function parseInput(input: string): ParsedInput {
     };
   }
 
-  // LinkedIn
-  if (/linkedin\.com/.test(trimmed)) {
-    return {
-      type: "linkedin",
-      id: null,
-      handle: null,
-      url: trimmed,
-      label: "LinkedIn · Post",
-    };
-  }
-
   // Plain @handle (assume YouTube)
   if (/^@?[a-zA-Z0-9_.-]+$/.test(trimmed) && !trimmed.includes(".")) {
     const handle = trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;

@@ -698,7 +698,7 @@ function Section({ title, accent, defaultOpen = true, badge, children }: {
 export default function ReverseEngineerPanel({ platform, result, loading, onAnalyze, onRetry }: ReverseEngineerPanelProps) {
   const [urlInput, setUrlInput] = useState("");
   const [targetPlatform, setTargetPlatform] = useState<TargetPlatform>(platform as TargetPlatform);
-  const intel = PLATFORM_INTEL[platform] ?? PLATFORM_INTEL.youtube;
+  const intel = PLATFORM_INTEL[platform as keyof typeof PLATFORM_INTEL] ?? PLATFORM_INTEL.youtube;
   const targetIntel = PLATFORM_META[targetPlatform];
   const adaptationKey = `${platform}→${targetPlatform}`;
   const adaptation = CROSS_PLATFORM_ADAPTATION[adaptationKey] ?? null;

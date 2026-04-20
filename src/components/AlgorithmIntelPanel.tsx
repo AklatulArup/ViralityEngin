@@ -15,7 +15,6 @@ const PLATFORM_ORDER: PlatformId[] = [
   "tiktok",
   "instagram",
   "x",
-  "linkedin",
 ];
 
 const WEIGHT_COLORS: Record<string, string> = {

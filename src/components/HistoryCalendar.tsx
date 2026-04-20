@@ -97,7 +97,7 @@ export default function HistoryCalendar({ history, referenceStore, onVideoClick 
         ? `https://www.youtube.com/watch?v=${e.id}`
         : `https://www.tiktok.com/@${e.channelName}/video/${e.id}`;
       addEntry(
-        date, e.name, e.channelName, e.platform,
+        date, e.name, e.channelName ?? "", e.platform ?? "unknown",
         Number(m.views ?? 0), Number((m as Record<string,unknown>).likes ?? 0),
         Number((m as Record<string,unknown>).comments ?? 0), Number((m as Record<string,unknown>).shares ?? 0),
         Number(m.engagement ?? 0), Number(m.vrsScore ?? 0), Number(m.velocity ?? 0),

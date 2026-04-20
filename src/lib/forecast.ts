@@ -33,6 +33,8 @@
 //     missing and user can provide it manually via the UI.
 
 import type { EnrichedVideo, VideoData, VRSResult } from "./types";
+import { applyConformalBounds, type ConformalTable } from "./conformal";
+import { classifyLifecycleTier, applyTierCeiling, type TierClassification } from "./lifecycle-tier";
 
 export type Platform = "youtube" | "youtube_short" | "tiktok" | "instagram" | "x";
 
@@ -68,6 +70,16 @@ export interface ForecastInput {
     scoreExponent:      number;
     minBaselinePosts:   number;
   }>>;
+  // Optional: conformal quantile table (from /api/forecast/conformal). When
+  // present with enough samples in a matching stratum, lifetime.low/high are
+  // replaced with empirical residual quantiles. The median is never touched.
+  conformalTable?: ConformalTable | null;
+  // Optional: keys within `manualInputs` whose values came from AI estimation
+  // (e.g. thumbnail CTR predicted from the thumbnail image) rather than from
+  // the RM / a Creator Studio screenshot. The value still flows into the
+  // forecast math — but confidence scoring excludes these from the "user
+  // provided this input" bump, because an AI estimate is a signal, not data.
+  aiEstimatedKeys?: Array<keyof ManualInputs>;
 }
 
 export interface VelocitySampleInput {
@@ -131,6 +143,12 @@ export interface Forecast {
 
   // If post-publish: how observed trajectory compares to prior
   trajectory: TrajectoryAnalysis | null;
+
+  // Platform-distribution-tier classification (TikTok/IG/Shorts only). Used
+  // to detect "200-view jail" (tier-1-stuck) and plateau (tier-4-plateau)
+  // states the trajectory formula can't see, and clamp the ceiling down
+  // when present.
+  lifecycleTier: TierClassification | null;
 
   // Transparency
   dataUsed:      DataSource[];   // actually used in the calculation
@@ -615,6 +633,7 @@ function computeConfidence(
   platform: Platform,
   manualInputs: ManualInputs,
   trajectory: TrajectoryAnalysis | null,
+  aiEstimatedKeys: Array<keyof ManualInputs> = [],
 ): Forecast["confidence"] {
   const reasons: string[] = [];
   let score = 0;
@@ -659,7 +678,12 @@ function computeConfidence(
   }
 
   // Factor 3: Private analytics provided (0-25 points)
-  const manualKeys = Object.keys(manualInputs).filter(k => manualInputs[k as keyof ManualInputs] != null);
+  // Exclude AI-estimated keys — those are helpful signals but not measurements,
+  // so they shouldn't boost "we have real data" confidence.
+  const aiSet = new Set<string>(aiEstimatedKeys as string[]);
+  const manualKeys     = Object.keys(manualInputs).filter(k => manualInputs[k as keyof ManualInputs] != null && !aiSet.has(k));
+  const aiOnlyKeyCount = Object.keys(manualInputs).filter(k => manualInputs[k as keyof ManualInputs] != null &&  aiSet.has(k)).length;
+
   if (manualKeys.length >= 3) {
     score += 25;
     reasons.push(`${manualKeys.length} private analytics inputs provided.`);
@@ -669,6 +693,9 @@ function computeConfidence(
   } else {
     score += 0;
     reasons.push(`No private analytics provided — forecast leans on public metrics only.`);
+  }
+  if (aiOnlyKeyCount > 0) {
+    reasons.push(`${aiOnlyKeyCount} input(s) are AI estimates (e.g. thumbnail-based CTR) — helpful but not real measurements.`);
   }
 
   // Factor 4: Trajectory data (0-15 points)
@@ -790,7 +817,7 @@ export function forecast(input: ForecastInput): Forecast {
   const adjMult = applyManualAdjustments(rawMult, platform, manualInputs);
 
   // ── Step 3: Record available vs missing inputs per platform ───────────
-  recordDataSources(video, platform, manualInputs, dataUsed, dataEstimated, dataMissing);
+  recordDataSources(video, platform, manualInputs, dataUsed, dataEstimated, dataMissing, input.aiEstimatedKeys ?? []);
 
   // ── Step 4: If no baseline, short-circuit ────────────────────────────
   if (!baseline || baseline.source === "insufficient") {
@@ -829,6 +856,46 @@ export function forecast(input: ForecastInput): Forecast {
     high:   Math.round(blended.high),
   };
 
+  // ── Step 6b: Conformal band override (if enough history) ─────────────
+  // Replace hand-tuned low/high with empirical quantiles of past residuals.
+  // The median is never touched — this only recalibrates uncertainty. When
+  // no matching stratum has >= 20 samples, applyConformalBounds returns null
+  // and we keep the hand-tuned bands (zero-regression fallback).
+  const conformalApplied = applyConformalBounds({
+    table:           input.conformalTable ?? null,
+    platform,
+    score,
+    predictedMedian: lifetime.median,
+    coverage:        0.80,
+  });
+  if (conformalApplied) {
+    // Apply, then re-enforce invariants: low <= median <= high and low >= current views.
+    const floor = Math.max(video.views, 0);
+    lifetime.low  = Math.min(lifetime.median, Math.max(floor, conformalApplied.low));
+    lifetime.high = Math.max(lifetime.median, conformalApplied.high);
+  }
+
+  // ── Step 6c: Lifecycle-tier ceiling clamp ─────────────────────────────
+  // For TikTok / IG / Shorts: detect tier-1-stuck ("200-view jail") or
+  // tier-4-plateau states the trajectory formula can't see, and clamp the
+  // forecast ceiling down when the algorithm has visibly stopped promoting.
+  // Never raises the forecast — only clamps downward when evidence is strong.
+  const ageHoursForTier = video.publishedAt
+    ? Math.max(0, (Date.now() - new Date(video.publishedAt).getTime()) / 3_600_000)
+    : 0;
+  const lifecycleTier = classifyLifecycleTier({
+    platform,
+    currentViews:    video.views,
+    ageHours:        ageHoursForTier,
+    velocitySamples: velocitySamples ?? [],
+  });
+  const tierClamped = applyTierCeiling(lifetime, video.views, lifecycleTier);
+  if (tierClamped.adjusted) {
+    lifetime.low    = tierClamped.low;
+    lifetime.median = tierClamped.median;
+    lifetime.high   = tierClamped.high;
+  }
+
   // ── Step 7: Project milestones from the lifetime number ──────────────
   const shareAt = (d: number) => cfg.cumulativeShare(d);
   const d1  = { low: Math.round(lifetime.low * shareAt(1)),  median: Math.round(lifetime.median * shareAt(1)),  high: Math.round(lifetime.high * shareAt(1))  };
@@ -843,7 +910,7 @@ export function forecast(input: ForecastInput): Forecast {
   }
 
   // ── Step 8: Confidence ────────────────────────────────────────────────
-  const confidence = computeConfidence(baseline, platform, manualInputs, trajectory);
+  const confidence = computeConfidence(baseline, platform, manualInputs, trajectory, input.aiEstimatedKeys ?? []);
 
   // ── Step 9: Interpretation ────────────────────────────────────────────
   const interpretation = buildInterpretation(score, lifetime, baseline, trajectory, platform, confidence);
@@ -868,6 +935,21 @@ export function forecast(input: ForecastInput): Forecast {
     notes.push(`Trajectory blend weight: ${(trajectory.blendWeight * 100).toFixed(0)}% observed vs ${((1-trajectory.blendWeight) * 100).toFixed(0)}% prior.`);
     notes.push(`Outperformance: ${trajectory.outperformance.toFixed(2)}× vs what this creator typically does at this stage.`);
   }
+  if (conformalApplied) {
+    notes.push(`Range calibrated from ${conformalApplied.n} past outcomes (${conformalApplied.stratumUsed === "score-band" ? "same score band" : "all scores on this platform"}).`);
+    // Log-residual > 0.2 ≈ >20% systemic median bias — worth surfacing.
+    if (Math.abs(conformalApplied.medianResidualLog) > 0.2) {
+      const dir = conformalApplied.medianResidualLog > 0 ? "under" : "over";
+      const pct = Math.abs(Math.exp(conformalApplied.medianResidualLog) - 1) * 100;
+      notes.push(`  · Historical ${dir}-prediction of ~${pct.toFixed(0)}% on the median — consider tuning.`);
+    }
+  }
+  if (lifecycleTier.tier !== "not-applicable" && lifecycleTier.tier !== "tier-1-hook") {
+    notes.push(`Distribution tier: ${lifecycleTier.tier} (${lifecycleTier.confidence} confidence). ${lifecycleTier.rationale}`);
+    if (tierClamped.adjusted) {
+      notes.push(`  · Ceiling clamped to ${lifetime.high.toLocaleString()} views — tier classification overrides trajectory projection.`);
+    }
+  }
   if (dataMissing.length > 0) {
     notes.push(`${dataMissing.length} high-impact input${dataMissing.length === 1 ? "" : "s"} not available — providing from creator analytics would tighten the forecast.`);
   }
@@ -877,6 +959,7 @@ export function forecast(input: ForecastInput): Forecast {
     horizonDays: cfg.horizonDays,
     scoreMultiplier: { score, ...rawMult },
     baseline, confidence, trajectory,
+    lifecycleTier,
     dataUsed, dataEstimated, dataMissing,
     interpretation, notes,
   };
@@ -903,6 +986,7 @@ function shortCircuit(
       reasons: [`Need at least ${cfg.minBaselinePosts} past posts — have ${baseline?.postsUsed ?? 0}.`],
     },
     trajectory: null,
+    lifecycleTier: null,
     dataUsed, dataEstimated, dataMissing,
     interpretation: `Cannot forecast: insufficient creator history. Need at least ${cfg.minBaselinePosts} past ${platform === "x" ? "posts" : "videos"} from this creator to build a reliable baseline.`,
     notes: [
@@ -918,10 +1002,36 @@ function recordDataSources(
   video: EnrichedVideo,
   platform: Platform,
   manual: ManualInputs,
-  dataUsed:      DataSource[],
-  _dataEstimated: DataSource[],
-  dataMissing:   DataSource[],
+  dataUsed:       DataSource[],
+  dataEstimated:  DataSource[],
+  dataMissing:    DataSource[],
+  aiEstimatedKeys: Array<keyof ManualInputs> = [],
 ): void {
+  const aiSet = new Set<string>(aiEstimatedKeys as string[]);
+  const manualOrMissingWithAI = (
+    key: keyof ManualInputs, shortLabel: string, longLabel: string,
+    note: string, impact: "high" | "medium" | "low", suffix?: string,
+  ): void => {
+    const v = manual[key];
+    if (v != null) {
+      if (aiSet.has(key as string)) {
+        dataEstimated.push({
+          field: key, label: `${shortLabel} (AI estimate)`,
+          value: suffix ? `${v}${suffix}` : v, source: "derived", impact,
+          note: `Estimated from the thumbnail/first-frame, not from the creator's dashboard. Provide the real value to tighten the forecast.`,
+        });
+      } else {
+        dataUsed.push({
+          field: key, label: `${shortLabel} (provided)`,
+          value: suffix ? `${v}${suffix}` : v, source: "manual", impact,
+        });
+      }
+    } else {
+      dataMissing.push({
+        field: key, label: longLabel, source: "missing", impact, note, userCanProvide: true,
+      });
+    }
+  };
 
   // Universal fields
   dataUsed.push({ field: "views",    label: "Current view count", value: video.views,    source: "api", impact: "high" });
@@ -936,58 +1046,40 @@ function recordDataSources(
     if (video.shares != null) dataUsed.push({ field: "shares", label: "Shares", value: video.shares, source: "api", impact: "high" });
     if (video.saves  != null) dataUsed.push({ field: "saves",  label: "Saves (collects)", value: video.saves, source: "api", impact: "high" });
 
-    manualOrMissing(dataUsed, dataMissing, manual, "ttCompletionPct", "Completion %", "Completion rate %",
+    manualOrMissingWithAI("ttCompletionPct", "Completion %", "Completion rate %",
       "TikTok Creator Studio → Analytics. #1 2026 signal (70% threshold).", "high", "%");
-    manualOrMissing(dataUsed, dataMissing, manual, "ttRewatchPct", "Rewatch %", "Rewatch rate %",
+    manualOrMissingWithAI("ttRewatchPct", "Rewatch %", "Rewatch rate %",
       "TikTok Creator Studio. Outranks follower count in 2026.", "high", "%");
-    manualOrMissing(dataUsed, dataMissing, manual, "ttFypViewPct", "FYP share %", "FYP traffic share %",
+    manualOrMissingWithAI("ttFypViewPct", "FYP share %", "FYP traffic share %",
       "TikTok Creator Studio → Traffic Source.", "medium", "%");
   }
 
   if (platform === "instagram") {
-    manualOrMissing(dataUsed, dataMissing, manual, "igSaves", "Saves", "Saves count",
+    manualOrMissingWithAI("igSaves", "Saves", "Saves count",
       "Instagram Insights (creator's own account only). Not exposed via public API.", "high");
-    manualOrMissing(dataUsed, dataMissing, manual, "igSends", "DM sends", "DM sends",
+    manualOrMissingWithAI("igSends", "DM sends", "DM sends",
       "Instagram Insights. Mosseri's #1 signal for non-follower reach (3-5× a like).", "high");
-    manualOrMissing(dataUsed, dataMissing, manual, "igReach", "Reach", "Accounts reached",
+    manualOrMissingWithAI("igReach", "Reach", "Accounts reached",
       "Instagram Insights. Enables true sends-per-reach ratio.", "medium");
-    manualOrMissing(dataUsed, dataMissing, manual, "igHold3s", "3-sec hold %", "3-second hold rate",
+    manualOrMissingWithAI("igHold3s", "3-sec hold %", "3-second hold rate",
       "Instagram Insights. Audition phase gate.", "medium", "%");
   }
 
   if (platform === "youtube" || platform === "youtube_short") {
-    manualOrMissing(dataUsed, dataMissing, manual, "ytAVDpct", "AVD %", "Average view duration %",
+    manualOrMissingWithAI("ytAVDpct", "AVD %", "Average view duration %",
       "YouTube Studio → Analytics. ~50% of YouTube Long-Form ranking formula.", "high", "%");
-    manualOrMissing(dataUsed, dataMissing, manual, "ytCTRpct", "CTR %", "Click-through rate %",
+    manualOrMissingWithAI("ytCTRpct", "CTR %", "Click-through rate %",
       "YouTube Studio. Below 2% = Browse/Suggested sunset.", "high", "%");
-    manualOrMissing(dataUsed, dataMissing, manual, "ytImpressions", "Impressions", "Impressions",
+    manualOrMissingWithAI("ytImpressions", "Impressions", "Impressions",
       "YouTube Studio. Drives Suggested/Browse distribution.", "medium");
   }
 
   if (platform === "x") {
     if (video.shares != null) dataUsed.push({ field: "reposts", label: "Retweets", value: video.shares, source: "api", impact: "medium" });
-    manualOrMissing(dataUsed, dataMissing, manual, "xTweepCred", "TweepCred", "TweepCred score",
+    manualOrMissingWithAI("xTweepCred", "TweepCred", "TweepCred score",
       "Premium dashboard. Below 0.65 hard-throttles distribution.", "high");
-    manualOrMissing(dataUsed, dataMissing, manual, "xReplyByAuthor", "Author replies", "Replies engaged by author",
+    manualOrMissingWithAI("xReplyByAuthor", "Author replies", "Replies engaged by author",
       "Count of replies the author responded to. Unlocks +75 signal (150× a like).", "high");
-  }
-}
-
-function manualOrMissing(
-  dataUsed: DataSource[], dataMissing: DataSource[],
-  manual: ManualInputs, key: keyof ManualInputs, shortLabel: string, longLabel: string,
-  note: string, impact: "high" | "medium" | "low", suffix?: string,
-): void {
-  const v = manual[key];
-  if (v != null) {
-    dataUsed.push({
-      field: key, label: `${shortLabel} (provided)`,
-      value: suffix ? `${v}${suffix}` : v, source: "manual", impact,
-    });
-  } else {
-    dataMissing.push({
-      field: key, label: longLabel, source: "missing", impact, note, userCanProvide: true,
-    });
   }
 }
 

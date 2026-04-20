@@ -105,7 +105,7 @@ export const PROP_TRADING_NICHE_PATHWAYS: NichePathway[] = [
   {
     startNiche: "Prop Trading",
     bridges: [
-      { niche: "Entrepreneurship", bridgeHook: "I built a trading business with someone else's capital", adoptionLag: "3-6 weeks", platform: "YouTube LF + LinkedIn" },
+      { niche: "Entrepreneurship", bridgeHook: "I built a trading business with someone else's capital", adoptionLag: "3-6 weeks", platform: "YouTube LF" },
       { niche: "Making Money Online", bridgeHook: "Prop trading is the most legitimate 'make money from your laptop' business", adoptionLag: "2-4 weeks", platform: "TikTok + YouTube Shorts" },
     ],
     mainstreamSignal: "MrBeast-adjacent creators referencing prop trading",

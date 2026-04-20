@@ -6,6 +6,8 @@ This repo is an internal tool used by FundedNext's Relationship Management (RM) 
 
 Primary users: FundedNext RM team. Terminology convention: use "RM" / "RM team", never "BD". Plain English throughout, no algorithmic jargon.
 
+**Supported platforms: YouTube Long-Form, YouTube Shorts, TikTok, Instagram Reels, X.** LinkedIn was scoped out and removed from all code paths — do not re-add LinkedIn as a platform option, URL parser case, algorithm-intel entry, competitor handle, or anywhere else. LinkedIn URLs inside scraped video `description` text are legitimate creator data and preserved as-is.
+
 Live deployment: https://virality-engin.vercel.app
 GitHub: https://github.com/AklatulArup/Arup_Virality_Engine
 Hosting: Vercel Hobby tier (one cron per day max — relevant to anything scheduled)
@@ -24,8 +26,8 @@ External APIs:
 - GNews (market volatility signal — key `GNEWS_API` with `GNEWS_API_KEY` fallback)
 
 Crons (Vercel Hobby = once-daily limit):
-- `/api/cron/collect-outcomes` — 4am UTC. Re-scrapes mature videos (platform-specific maturity: X=3d, TikTok=30d, IG=35d, YT=90d). Records actual views against stored predictions.
-- `/api/cron/track-velocity` — 5:30am UTC. Samples views at 24h / 48h / 72h / 7d / 14d / 30d milestones. Originally hourly but downgraded to daily due to Hobby tier. For full hourly granularity, either upgrade to Pro or add a GitHub Actions workflow pinging the endpoint.
+- `/api/cron/collect-outcomes` — 4am UTC (Vercel). Re-scrapes mature videos (platform-specific maturity: X=3d, TikTok=30d, IG=35d, YT=90d). Records actual views against stored predictions.
+- `/api/cron/track-velocity` — Vercel runs it once daily at 5:30am UTC as a safety net; the real cadence comes from the GitHub Actions workflow at `.github/workflows/track-velocity.yml`, which pings hourly at :05. This gives us the 1h/3h/6h/12h/24h/48h/72h samples the endpoint's schedule already defines. Hobby tier doesn't allow sub-daily Vercel crons, so GH Actions is the workaround. Requires repo secret `CRON_SECRET` (same value as Vercel env var).
 
 CRON_SECRET env var is set and checked by both cron endpoints (rejects unauthenticated pings with 401).
 
@@ -44,6 +46,11 @@ The entry point — sidebar, input tabs per platform, reference store integratio
 Two exported functions: `computeCalibration()` (browser, reads localStorage) and `computeCalibrationFrom(snapshots[])` (pure, used server-side by the calibration API). MdAPE, coverage, direction accuracy, bias.
 
 **Other key libraries:**
+- `src/lib/thumbnail-ctr-predictor.ts` — Gemini Vision scorer for YouTube / Shorts thumbnails. Scores against a 20-point checklist (from `thumbnail-deep-analysis.md`) and maps the score to an estimated CTR %. Called by `/api/thumbnail/score?url=...`, which KV-caches results by URL hash. The forecast engine consumes the estimate by auto-filling `manualInputs.ytCTRpct` — but the ForecastPanel tracks the key in `aiEstimatedKeys`, which is threaded through `forecast()` so confidence scoring doesn't count AI estimates as "real data" and the memory endpoint doesn't persist them.
+- `src/lib/lifecycle-tier.ts` — short-form distribution-tier classifier. `classifyLifecycleTier()` takes `(platform, currentViews, ageHours, velocitySamples)` and returns one of `tier-1-hook / tier-1-stuck / tier-2-rising / tier-2-stuck / tier-3-viral / tier-4-plateau / not-applicable`. Only applies to TikTok/IG/Shorts (X is time-decay, YT LF is evergreen). `applyTierCeiling()` is called inside `forecast()` after the trajectory blend and conformal step — clamps `lifetime.high` **down** when the tier implies the distribution has capped (stuck or plateau). Never raises the forecast. The hourly velocity workflow from `.github/workflows/track-velocity.yml` is what feeds this with sufficient signal to distinguish stuck vs rising tier states.
+- `src/lib/conformal.ts` — empirical quantile intervals. Computes `ConformalTable` from the snapshot pool; `applyConformalBounds()` is called inside `forecast()` to replace the hand-tuned upside/downside bands with residual-derived quantiles when a matching (platform × score-band) stratum has ≥20 samples. Falls through to the hand-tuned bands when data is thin — zero-regression. Persisted to KV at `config:conformal-quantiles`.
+- `src/lib/analytics-ocr.ts` — Gemini Vision wrapper that parses a Creator Studio / Insights / YT Studio / X Premium screenshot into `Partial<ManualInputs>`. Called by `/api/analytics/ocr`. Uses `gemini-2.0-flash` with `responseMimeType: application/json`. Refuses to invent numbers — if a field isn't clearly visible it's omitted.
+- `src/lib/analytics-memory.ts` — per-creator KV memory of last-submitted `ManualInputs`. Keyed `creator-analytics:<platform>:<handle-normalized>`. Loaded on mount in `ForecastPanel` (pre-fills empty fields only — never clobbers RM input), saved on change (debounced 1.5s).
 - `src/lib/seasonality.ts` — day-of-week + market volatility
 - `src/lib/niche-classifier.ts` — 7 niches, keyword-based (prop-trading, crypto-trader, forex-specialist, options-trader, lifestyle-trader, general-finance, non-finance)
 - `src/lib/reference-store.ts` — builds ReferenceEntry objects; `buildEntryFromVideo()` is used by every platform's analyze flow to ingest the full fetched history into the pool
@@ -63,7 +70,11 @@ Under `/api/`:
 - `forecast/velocity?videoId=...` — reads velocity samples for a video
 - `forecast/sentiment` — Gemini-backed comment sentiment classifier
 - `forecast/tuning` — GET applied overrides, POST `apply`/`reject`/`revert`/`clear-all`
+- `forecast/conformal` — GET current conformal quantile table, POST `recompute` or `clear`. Recomputed automatically at the end of `collect-outcomes` whenever new outcomes land.
 - `forecast/log` — manual prediction records (GET list, POST new, DELETE by id)
+- `thumbnail/score` — GET `?url=<thumbnail-url>` → `{ score: { totalPoints, estimatedCTR, ctrConfidence, perCriterion[], rationale } }`. Fetches the image server-side, calls Gemini Vision on the 20-point checklist, KV-caches by URL hash.
+- `analytics/ocr` — POST `{ imageBase64, mimeType }` → `{ extraction: { fields, detectedPlatform, summary, warnings } }`. Calls Gemini Vision to parse a creator-studio screenshot. Max image 6MB base64.
+- `analytics/memory` — per-creator memory of `ManualInputs`. `GET ?platform=&handle=` returns the record; `POST { platform, handle, inputs, sourceVideoId?, source? }` merges non-null fields and persists.
 - `cron/collect-outcomes` / `cron/track-velocity` — the two Vercel crons
 
 ## The learning loop end-to-end
@@ -79,6 +90,8 @@ Under `/api/`:
 9. `forecast()` composes override onto `PLATFORM_CONFIG[platform]` before running
 
 Override-able parameters: `upsideMultiplier`, `downsideMultiplier`, `scoreExponent`, `minBaselinePosts`.
+
+**Conformal intervals (parallel track to tuning overrides):** when `collect-outcomes` records a new outcome it also calls `recomputeConformalTable()` from `src/lib/conformal.ts` → writes `config:conformal-quantiles` to KV. ForecastPanel fetches this on mount and passes it to `forecast()`. Inside `forecast()`, after the trajectory blend, `applyConformalBounds()` replaces `lifetime.low/high` with empirical residual quantiles **only if** the stratum (platform × score-band, or platform-pooled fallback) has ≥20 samples. Otherwise the hand-tuned bands survive untouched. The median is never modified — conformal only recalibrates uncertainty.
 
 ## Deployment notes
 
@@ -110,8 +123,8 @@ Uppercase + letter-spacing 0.08-0.12em for eyebrow labels. Numbers are almost al
 
 ## Known limitations / open items
 
-- Velocity tracker runs once daily (Hobby tier). Early-hour samples (1h/3h/6h/12h) are unavailable without GitHub Actions or Pro upgrade. Cost: ~5% of achievable MdAPE improvement on TikTok/IG for videos under 24h old.
 - TikTok and Instagram comment sentiment not wired — requires TikTok Research API approval (1-4 weeks) and IG Graph API business auth flow. Only YouTube sentiment is live.
+- Direct pull of private creator analytics (TikTok Research API, IG Graph API, YouTube Analytics API OAuth) is NOT yet wired — all external-analytics APIs are approval-gated (1-4wk each). Interim workaround is the screenshot-OCR + per-creator memory flow at `src/lib/analytics-ocr.ts` + `src/lib/analytics-memory.ts`: RMs paste a Creator Studio screenshot and Gemini Vision fills the fields. When/if direct API access is approved, the memory endpoint is the correct place to write ingested values.
 - The calibration page is empty until the first X posts mature (3 days from first forecast). TikTok/IG populate at 30d. YouTube at 90d.
 
 ## For RM-facing language

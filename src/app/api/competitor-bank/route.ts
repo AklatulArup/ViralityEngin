@@ -11,7 +11,6 @@ export interface Competitor {
     instagram?: string;
     tiktok?: string;
     x?: string;
-    linkedin?: string;
   };
 }
 

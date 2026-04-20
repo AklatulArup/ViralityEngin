@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { kvGet, kvSet, kvListRange, isKvAvailable } from "@/lib/kv";
 import type { ForecastSnapshot } from "@/lib/forecast-learning";
 import type { Platform } from "@/lib/forecast";
+import { recomputeConformalTable } from "@/lib/conformal";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 min — rescrapes can be slow
@@ -45,6 +46,8 @@ interface CollectorResult {
   skipped:         number;
   errors:          Array<{ snapshotId: string; error: string }>;
   durationMs:      number;
+  conformalRecomputed?: boolean;
+  conformalSampleCount?: number;
 }
 
 export async function GET(req: NextRequest) {
@@ -117,6 +120,20 @@ export async function GET(req: NextRequest) {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         result.errors.push({ snapshotId: snap.id, error: msg });
+      }
+    }
+
+    // Refresh conformal quantile table whenever new outcomes landed. This is
+    // what keeps the empirical residual distribution current — the forecast
+    // engine reads it on every request via /api/forecast/conformal.
+    if (result.recordedOutcomes > 0) {
+      try {
+        const table = await recomputeConformalTable();
+        result.conformalRecomputed  = true;
+        result.conformalSampleCount = table.sampleCount;
+      } catch (e) {
+        // Non-fatal — forecast falls back to hand-tuned bands.
+        result.errors.push({ snapshotId: "conformal-recompute", error: e instanceof Error ? e.message : String(e) });
       }
     }
 

@@ -186,7 +186,6 @@ export interface CompetitorEntry {
     tiktok?: string;
     instagram?: string;
     x?: string;
-    linkedin?: string;
   };
 }
 
@@ -197,8 +196,7 @@ export type PlatformId =
   | "youtube-shorts"
   | "tiktok"
   | "instagram"
-  | "x"
-  | "linkedin";
+  | "x";
 
 export interface PlatformSignal {
   name: string;
@@ -406,7 +404,6 @@ export type InputType =
   | "tiktok"
   | "instagram"
   | "x"
-  | "linkedin"
   | "unknown";
 
 export interface ParsedInput {

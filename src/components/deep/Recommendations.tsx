@@ -44,7 +44,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   tiktok: "TikTok",
   instagram: "Instagram",
   x: "X",
-  linkedin: "LinkedIn",
 };
 
 export default function Recommendations({

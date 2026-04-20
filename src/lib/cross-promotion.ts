@@ -4,7 +4,6 @@ const SOCIAL_PATTERNS: { platform: string; regex: RegExp }[] = [
   { platform: "Instagram", regex: /https?:\/\/(www\.)?instagram\.com\/[^\s)]+/gi },
   { platform: "Twitter/X", regex: /https?:\/\/(www\.)?(twitter\.com|x\.com)\/[^\s)]+/gi },
   { platform: "TikTok", regex: /https?:\/\/(www\.)?tiktok\.com\/[^\s)]+/gi },
-  { platform: "LinkedIn", regex: /https?:\/\/(www\.)?linkedin\.com\/[^\s)]+/gi },
   { platform: "Discord", regex: /https?:\/\/(www\.)?(discord\.(gg|com))\/[^\s)]+/gi },
   { platform: "Telegram", regex: /https?:\/\/(www\.)?(t\.me|telegram\.me)\/[^\s)]+/gi },
   { platform: "Facebook", regex: /https?:\/\/(www\.)?facebook\.com\/[^\s)]+/gi },

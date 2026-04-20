@@ -394,82 +394,6 @@ export const PLATFORM_INTEL: Record<PlatformId, PlatformInsight> = {
     ],
     lastUpdated: "2026-Q1",
   },
-
-  linkedin: {
-    id: "linkedin",
-    name: "LinkedIn",
-    icon: "LI",
-    signals: [
-      {
-        name: "Dwell Time",
-        weight: "highest",
-        description:
-          "Time spent reading is LinkedIn's primary signal. Long-form posts that hold attention outperform short updates by 3-5x.",
-        confidence: "confirmed",
-      },
-      {
-        name: "Comment Quality",
-        weight: "highest",
-        description:
-          "LinkedIn weights meaningful comments heavily. Posts that generate discussion (not just 'great post!') get extended distribution.",
-        confidence: "confirmed",
-      },
-      {
-        name: "Reshares with Commentary",
-        weight: "strong",
-        description:
-          "Reshares where the person adds their own perspective signal that content sparked thinking.",
-        confidence: "strong",
-      },
-      {
-        name: "Profile Relevance",
-        weight: "strong",
-        description:
-          "Content shown preferentially to people in related industries/roles. Your headline and profile affect who sees your posts.",
-        confidence: "strong",
-      },
-      {
-        name: "Post Format",
-        weight: "moderate",
-        description:
-          "Document/carousel posts get 2-3x reach vs text-only. Native video is boosted over external links.",
-        confidence: "confirmed",
-      },
-      {
-        name: "Engagement Velocity",
-        weight: "moderate",
-        description:
-          "Likes and comments in first 90 minutes determine if post enters second-degree network distribution.",
-        confidence: "strong",
-      },
-    ],
-    keyBehaviors: [
-      "Hook in first 2 lines (before 'see more' truncation) — bold statement or surprising stat",
-      "Line breaks every 1-2 sentences for mobile readability",
-      "Document/PDF carousels for educational content (highest dwell time format)",
-      "Tag relevant people (not mass-tagging) to spark initial engagement",
-      "Post between 7-9am or 12-1pm in target timezone (Tue-Thu optimal)",
-      "Respond to every comment in first 2 hours",
-      "End with a question to drive comments",
-    ],
-    optimalFormats: [
-      "Long-form text post with line breaks (1300-2000 characters)",
-      "Document/PDF carousel (educational content)",
-      "Personal story with professional lesson",
-      "Data-backed insight with contrarian angle",
-      "Behind-the-scenes of business decision",
-      "Native video under 2 minutes",
-    ],
-    antiPatterns: [
-      "External links in post body (add in comments instead)",
-      "Wall of text without line breaks",
-      "Overly promotional without value",
-      "Mass-tagging people for engagement bait",
-      "Posting on weekends (50% less reach)",
-      "Generic motivational quotes without personal angle",
-    ],
-    lastUpdated: "2026-Q1",
-  },
 };
 
 export function getPlatformRecommendations(
@@ -493,15 +417,6 @@ export function getPlatformRecommendations(
           text: `Repurpose as an 8-10 slide Instagram carousel. Educational carousels get the highest save rate on Instagram, and saves are the #1 ranking signal.`,
           platformContext: ["instagram"],
           evidence: `Educational archetypes align with Instagram's save-driven algorithm. Carousel dwell time (55s+) is 3.7x higher than single images.`,
-        });
-      }
-      if (pid === "linkedin") {
-        recs.push({
-          priority: "high",
-          category: "platform",
-          text: `Convert key insights into a LinkedIn document carousel or long-form post. Educational content with data drives the highest dwell time on LinkedIn.`,
-          platformContext: ["linkedin"],
-          evidence: `LinkedIn's algorithm prioritizes dwell time above all. Document posts get 2-3x reach vs text-only.`,
         });
       }
     }
@@ -545,17 +460,7 @@ export function getPlatformRecommendations(
       }
     }
 
-    if (archetypes.includes("emotional") || archetypes.includes("behind-scenes")) {
-      if (pid === "linkedin") {
-        recs.push({
-          priority: "medium",
-          category: "platform",
-          text: `Adapt the personal story into a LinkedIn post with professional lessons. Personal vulnerability + business insight is LinkedIn's highest-performing formula.`,
-          platformContext: ["linkedin"],
-          evidence: `LinkedIn's comment quality signal rewards posts that spark genuine discussion. Personal stories with lessons generate meaningful comments.`,
-        });
-      }
-    }
+    // (emotional/behind-scenes archetype routing intentionally empty here — no platform in the active set is specifically tuned for it.)
 
     // Low engagement warning
     if (engagement < 3 && pid === "youtube") {

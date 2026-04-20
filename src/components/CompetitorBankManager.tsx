@@ -11,7 +11,6 @@ export interface Competitor {
     instagram?: string;
     tiktok?: string;
     x?: string;
-    linkedin?: string;
   };
 }
 
@@ -20,7 +19,7 @@ interface CompetitorBankManagerProps {
   onChange: (competitors: Competitor[]) => void;
 }
 
-const PLATFORMS = ["youtube", "instagram", "tiktok", "x", "linkedin"] as const;
+const PLATFORMS = ["youtube", "instagram", "tiktok", "x"] as const;
 type Platform = (typeof PLATFORMS)[number];
 
 const PLATFORM_LABELS: Record<Platform, { label: string; color: string }> = {
@@ -28,7 +27,6 @@ const PLATFORM_LABELS: Record<Platform, { label: string; color: string }> = {
   instagram: { label: "Instagram", color: "#ec4899" },
   tiktok: { label: "TikTok", color: "#06b6d4" },
   x: { label: "X / Twitter", color: "#94a3b8" },
-  linkedin: { label: "LinkedIn", color: "#3b82f6" },
 };
 
 const emptyForm = (): Competitor => ({

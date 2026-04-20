@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { forecast, projectAtDate, type ManualInputs, type Platform, type DataSource, type DateProjection } from "@/lib/forecast";
+import type { ConformalTable } from "@/lib/conformal";
 import { INPUT_TOOLTIPS, type InputTooltip } from "@/lib/input-tooltips";
 import { recordForecast } from "@/lib/forecast-learning";
 import { computeDayOfWeekProfile, fetchMarketVolatility, combineSeasonality, type DayOfWeekProfile, type MarketVolatilityProfile } from "@/lib/seasonality";
@@ -19,6 +20,12 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   const [manualInputs, setManualInputs] = useState<ManualInputs>({});
   const [inputsOpen, setInputsOpen] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
+  // Keys within manualInputs whose values came from AI estimation (e.g.
+  // thumbnail-based CTR prediction) rather than the RM or a Creator Studio
+  // screenshot. These still inform the forecast but are excluded from the
+  // "provided manual inputs" confidence bump.
+  const [aiEstimatedKeys, setAiEstimatedKeys] = useState<Set<keyof ManualInputs>>(new Set());
+  const [thumbnailCTR, setThumbnailCTR] = useState<{ estimatedCTR: number; totalPoints: number; maxPoints: number; rationale: string; ctrConfidence: string } | null>(null);
 
   // Fetch velocity time series for this video from the tracker cron store
   const [velocitySamples, setVelocitySamples] = useState<Array<{ ageHours: number; views: number; velocity: number; acceleration: number }>>([]);
@@ -31,6 +38,34 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
       })
       .catch(() => {});
   }, [video.id]);
+
+  // Thumbnail-CTR predictor (YouTube / Shorts only). Gemini Vision scores
+  // the thumbnail against a 20-point packaging checklist and returns an
+  // estimated CTR %. Auto-fills manualInputs.ytCTRpct when the RM hasn't
+  // provided a real Creator Studio CTR — the forecast consumes it via the
+  // existing AVD/CTR multiplier but flags it as an AI estimate for both
+  // confidence scoring and UI transparency.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (platform !== "youtube" && platform !== "youtube_short") return;
+    if (!video.thumbnail) return;
+    // Don't refetch if the user (or Creator Studio OCR) already provided a
+    // real CTR — real data always beats an AI estimate.
+    if (manualInputs.ytCTRpct != null && !aiEstimatedKeys.has("ytCTRpct")) return;
+    fetch(`/api/thumbnail/score?url=${encodeURIComponent(video.thumbnail)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.ok || !d.score) return;
+        const s = d.score as { estimatedCTR: number; totalPoints: number; maxPoints: number; rationale: string; ctrConfidence: string };
+        setThumbnailCTR(s);
+        setManualInputs(prev => prev.ytCTRpct != null && !aiEstimatedKeys.has("ytCTRpct")
+          ? prev
+          : { ...prev, ytCTRpct: s.estimatedCTR });
+        setAiEstimatedKeys(prev => new Set(prev).add("ytCTRpct"));
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video.thumbnail, platform]);
 
   // Day-of-week profile — computed locally from creator history, no fetch
   const dowProfile: DayOfWeekProfile | null = useMemo(
@@ -104,6 +139,144 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
       .catch(() => {});
   }, []);
 
+  // Conformal quantile table — replaces hand-tuned upside/downside bands with
+  // empirical quantiles from the residual pool. Null until enough samples
+  // mature (cron-maintained). forecast() falls back to hand-tuned bands when
+  // no matching stratum is ready.
+  const [conformalTable, setConformalTable] = useState<ConformalTable | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    fetch("/api/forecast/conformal")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.ok && d.table) setConformalTable(d.table as ConformalTable); })
+      .catch(() => {});
+  }, []);
+
+  // ── Private-analytics ingestion (screenshot OCR) + per-creator memory ──
+  // The ManualInputs fields are high-signal but only available from the
+  // creator's own studio dashboard. Typing them kills adoption. Two mechanisms
+  // close the data gap:
+  //   1. OCR: RM pastes or uploads a Creator Studio screenshot → Gemini Vision
+  //      extracts the numeric fields into `manualInputs`.
+  //   2. Memory: last-known values per (creator-handle, platform) are stored
+  //      in KV and pre-fill on the next forecast for the same creator.
+  const [ocrStatus, setOcrStatus] = useState<{ kind: "working" | "done" | "error"; message: string } | null>(null);
+
+  const ingestImage = useCallback(async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setOcrStatus({ kind: "error", message: "Not an image file." });
+      return;
+    }
+    setOcrStatus({ kind: "working", message: "Reading screenshot…" });
+    try {
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Could not read file."));
+        reader.onload = () => {
+          const out = typeof reader.result === "string" ? reader.result : "";
+          const b64  = out.includes(",") ? out.split(",").pop() ?? "" : out;
+          resolve(b64);
+        };
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/analytics/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64, mimeType: file.type }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!data?.ok) {
+        setOcrStatus({ kind: "error", message: data?.reason ?? "Extraction failed." });
+        return;
+      }
+      const rawFields = (data.extraction?.fields ?? {}) as Record<string, { value?: unknown }>;
+      const extracted: Partial<ManualInputs> = {};
+      for (const [k, f] of Object.entries(rawFields)) {
+        if (f && typeof f.value === "number" && Number.isFinite(f.value)) {
+          (extracted as Record<string, number>)[k] = f.value;
+        }
+      }
+      if (Object.keys(extracted).length === 0) {
+        setOcrStatus({ kind: "error", message: "No recognisable analytics in this image." });
+        return;
+      }
+      setManualInputs(prev => ({ ...prev, ...extracted }));
+      setInputsOpen(true);
+      const summary: string = typeof data.extraction?.summary === "string" ? data.extraction.summary : "";
+      setOcrStatus({
+        kind: "done",
+        message: `Filled ${Object.keys(extracted).length} field${Object.keys(extracted).length === 1 ? "" : "s"}${summary ? " · " + summary : ""}.`,
+      });
+    } catch (e) {
+      setOcrStatus({ kind: "error", message: e instanceof Error ? e.message : "Network error." });
+    }
+  }, []);
+
+  // Window-level paste handler so RMs can Ctrl+V a screenshot straight from
+  // their clipboard. Only active while the analytics form is expanded — off
+  // otherwise so pastes inside other inputs aren't hijacked.
+  useEffect(() => {
+    if (typeof window === "undefined" || !inputsOpen) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith("image/"));
+      if (!item) return;
+      const file = item.getAsFile();
+      if (file) { e.preventDefault(); ingestImage(file); }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [inputsOpen, ingestImage]);
+
+  // Creator memory: hydrate on channel change.
+  useEffect(() => {
+    if (!video.channel || typeof window === "undefined") return;
+    fetch(`/api/analytics/memory?platform=${platform}&handle=${encodeURIComponent(video.channel)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.ok || !d.record?.inputs) return;
+        const remembered = d.record.inputs as Record<string, unknown>;
+        setManualInputs(prev => {
+          const merged: ManualInputs = { ...prev };
+          for (const [k, v] of Object.entries(remembered)) {
+            if ((merged as Record<string, unknown>)[k] == null && typeof v === "number") {
+              (merged as Record<string, number>)[k] = v;
+            }
+          }
+          return merged;
+        });
+      })
+      .catch(() => {});
+  }, [video.channel, platform]);
+
+  // Creator memory: save on manualInputs change, debounced 1.5s. AI-estimated
+  // keys are filtered out of the save payload — we don't want an AI-predicted
+  // CTR to persist as if it were a real Creator Studio number, because the
+  // next forecast would then refuse to refetch it.
+  useEffect(() => {
+    if (!video.channel || typeof window === "undefined") return;
+    const nonNull: Record<string, number> = {};
+    for (const [k, v] of Object.entries(manualInputs)) {
+      if (typeof v === "number" && Number.isFinite(v) && !aiEstimatedKeys.has(k as keyof ManualInputs)) {
+        nonNull[k] = v;
+      }
+    }
+    if (Object.keys(nonNull).length === 0) return;
+    const t = setTimeout(() => {
+      fetch("/api/analytics/memory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform,
+          handle:        video.channel,
+          inputs:        nonNull,
+          sourceVideoId: video.id,
+          source:        "merged",
+        }),
+      }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [manualInputs, video.channel, video.id, platform, aiEstimatedKeys]);
+
   const result = useMemo(
     () => forecast({
       video, creatorHistory, platform, manualInputs, velocitySamples,
@@ -114,8 +287,10 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
       nicheLabel: niche.niche,
       nicheRationale: niche.rationale,
       configOverrides,
+      conformalTable,
+      aiEstimatedKeys: Array.from(aiEstimatedKeys),
     }),
-    [video, creatorHistory, platform, manualInputs, velocitySamples, seasonality, sentimentScore, sentimentRationale, niche, nicheAdj, configOverrides],
+    [video, creatorHistory, platform, manualInputs, velocitySamples, seasonality, sentimentScore, sentimentRationale, niche, nicheAdj, configOverrides, conformalTable, aiEstimatedKeys],
   );
 
   // Persist snapshot for later calibration — debounced: only once per video + inputs combo
@@ -162,6 +337,14 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   const update = (key: keyof ManualInputs, raw: string) => {
     const n = raw === "" ? undefined : Number(raw);
     setManualInputs(prev => ({ ...prev, [key]: Number.isFinite(n as number) ? n : undefined }));
+    // RM just typed this field — it's no longer an AI estimate.
+    if (aiEstimatedKeys.has(key)) {
+      setAiEstimatedKeys(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
   };
 
   const conf = result.confidence.level;
@@ -293,7 +476,14 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
               <div style={noteStyle}>
                 These fields are not available via any public API. Pull them from the creator&apos;s own analytics dashboard. Forecast recalculates as you type.
               </div>
-              <ManualInputsForm platform={platform} update={update} />
+              <ScreenshotIngest onFile={ingestImage} status={ocrStatus} />
+              {thumbnailCTR && aiEstimatedKeys.has("ytCTRpct") && (
+                <div style={{ fontSize: 11.5, color: "#A8A6A1", lineHeight: 1.5, padding: "8px 10px", background: "rgba(96,165,250,0.06)", border: "1px solid rgba(96,165,250,0.2)", borderRadius: 6 }}>
+                  <span style={{ color: "#60A5FA" }}>AI thumbnail score:</span> <span style={{ fontFamily: "IBM Plex Mono, monospace", color: "#E8E6E1" }}>{thumbnailCTR.totalPoints}/{thumbnailCTR.maxPoints}</span> → estimated CTR <span style={{ fontFamily: "IBM Plex Mono, monospace", color: "#E8E6E1" }}>{thumbnailCTR.estimatedCTR.toFixed(1)}%</span> ({thumbnailCTR.ctrConfidence}). Provide the real Studio CTR to replace this estimate.
+                  <div style={{ color: "#6B6964", marginTop: 4, fontSize: 11 }}>{thumbnailCTR.rationale}</div>
+                </div>
+              )}
+              <ManualInputsForm platform={platform} manualInputs={manualInputs} update={update} />
             </div>
           )}
         </div>
@@ -566,43 +756,112 @@ function DataColumn({ title, items, color }: { title: string; items: DataSource[
   );
 }
 
-function ManualInputsForm({ platform, update }: { platform: Platform; update: (key: keyof ManualInputs, v: string) => void }) {
+function ManualInputsForm({ platform, manualInputs, update }: {
+  platform: Platform;
+  manualInputs: ManualInputs;
+  update: (key: keyof ManualInputs, v: string) => void;
+}) {
+  // Controlled inputs: read current value from manualInputs state so OCR
+  // ingestion and per-creator memory actually show up in the UI instead of
+  // invisibly hydrating the state while the <input> elements stay blank.
+  const valOf = (key: keyof ManualInputs): string => {
+    const v = manualInputs[key];
+    return typeof v === "number" && Number.isFinite(v) ? String(v) : "";
+  };
   return (
     <>
       {platform === "tiktok" && (
         <>
-          <InputRow fieldKey="ttCompletionPct" label="Completion %"  onChange={(v) => update("ttCompletionPct", v)} suffix="%" />
-          <InputRow fieldKey="ttRewatchPct"    label="Rewatch %"     onChange={(v) => update("ttRewatchPct", v)}    suffix="%" />
-          <InputRow fieldKey="ttFypViewPct"    label="FYP traffic %" onChange={(v) => update("ttFypViewPct", v)}    suffix="%" />
+          <InputRow fieldKey="ttCompletionPct" label="Completion %"  value={valOf("ttCompletionPct")} onChange={(v) => update("ttCompletionPct", v)} suffix="%" />
+          <InputRow fieldKey="ttRewatchPct"    label="Rewatch %"     value={valOf("ttRewatchPct")}    onChange={(v) => update("ttRewatchPct", v)}    suffix="%" />
+          <InputRow fieldKey="ttFypViewPct"    label="FYP traffic %" value={valOf("ttFypViewPct")}    onChange={(v) => update("ttFypViewPct", v)}    suffix="%" />
         </>
       )}
       {platform === "instagram" && (
         <>
-          <InputRow fieldKey="igSaves"    label="Saves"         onChange={(v) => update("igSaves", v)} />
-          <InputRow fieldKey="igSends"    label="DM sends"      onChange={(v) => update("igSends", v)} />
-          <InputRow fieldKey="igReach"    label="Reach"         onChange={(v) => update("igReach", v)} />
-          <InputRow fieldKey="igHold3s"   label="3-sec hold %"  onChange={(v) => update("igHold3s", v)} suffix="%" />
+          <InputRow fieldKey="igSaves"    label="Saves"         value={valOf("igSaves")}  onChange={(v) => update("igSaves", v)} />
+          <InputRow fieldKey="igSends"    label="DM sends"      value={valOf("igSends")}  onChange={(v) => update("igSends", v)} />
+          <InputRow fieldKey="igReach"    label="Reach"         value={valOf("igReach")}  onChange={(v) => update("igReach", v)} />
+          <InputRow fieldKey="igHold3s"   label="3-sec hold %"  value={valOf("igHold3s")} onChange={(v) => update("igHold3s", v)} suffix="%" />
         </>
       )}
       {(platform === "youtube" || platform === "youtube_short") && (
         <>
-          <InputRow fieldKey="ytAVDpct"       label="AVD %"        onChange={(v) => update("ytAVDpct", v)}       suffix="%" />
-          <InputRow fieldKey="ytCTRpct"       label="CTR %"        onChange={(v) => update("ytCTRpct", v)}       suffix="%" />
-          <InputRow fieldKey="ytImpressions"  label="Impressions"  onChange={(v) => update("ytImpressions", v)} />
+          <InputRow fieldKey="ytAVDpct"       label="AVD %"        value={valOf("ytAVDpct")}      onChange={(v) => update("ytAVDpct", v)}       suffix="%" />
+          <InputRow fieldKey="ytCTRpct"       label="CTR %"        value={valOf("ytCTRpct")}      onChange={(v) => update("ytCTRpct", v)}       suffix="%" />
+          <InputRow fieldKey="ytImpressions"  label="Impressions"  value={valOf("ytImpressions")} onChange={(v) => update("ytImpressions", v)} />
         </>
       )}
       {platform === "x" && (
         <>
-          <InputRow fieldKey="xTweepCred"     label="TweepCred"            onChange={(v) => update("xTweepCred", v)} />
-          <InputRow fieldKey="xReplyByAuthor" label="Replies engaged back" onChange={(v) => update("xReplyByAuthor", v)} />
+          <InputRow fieldKey="xTweepCred"     label="TweepCred"            value={valOf("xTweepCred")}     onChange={(v) => update("xTweepCred", v)} />
+          <InputRow fieldKey="xReplyByAuthor" label="Replies engaged back" value={valOf("xReplyByAuthor")} onChange={(v) => update("xReplyByAuthor", v)} />
         </>
       )}
-      <InputRow fieldKey="baselineMedianOverride" label="Override baseline" onChange={(v) => update("baselineMedianOverride", v)} />
+      <InputRow fieldKey="baselineMedianOverride" label="Override baseline" value={valOf("baselineMedianOverride")} onChange={(v) => update("baselineMedianOverride", v)} />
     </>
   );
 }
 
-function InputRow({ fieldKey, label, onChange, suffix }: { fieldKey: string; label: string; onChange: (v: string) => void; suffix?: string }) {
+// Screenshot dropzone / file picker — sits above the manual inputs form.
+// Accepts click-to-upload or Ctrl+V paste (paste handler is scoped at the
+// panel level via a window listener that only binds while inputsOpen = true).
+function ScreenshotIngest({
+  onFile,
+  status,
+}: {
+  onFile: (file: File) => void;
+  status: { kind: "working" | "done" | "error"; message: string } | null;
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const statusColor =
+    status?.kind === "done"    ? "#2ECC8A" :
+    status?.kind === "error"   ? "#FF6B7A" :
+    status?.kind === "working" ? "#60A5FA" :
+                                 "#8A8883";
+  return (
+    <div style={{
+      background: "rgba(167,139,250,0.06)", border: "1px dashed rgba(167,139,250,0.35)",
+      borderRadius: 8, padding: 12,
+    }}>
+      <div className="flex items-center gap-3" style={{ flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          style={{
+            background: "rgba(167,139,250,0.14)", border: "1px solid rgba(167,139,250,0.4)",
+            color: "#D6C8FF", padding: "6px 12px", borderRadius: 6, fontSize: 12,
+            fontWeight: 500, cursor: "pointer",
+          }}
+        >
+          Ingest screenshot
+        </button>
+        <div style={{ fontSize: 11.5, color: "#8A8883", lineHeight: 1.5, flex: 1, minWidth: 180 }}>
+          Or press <span style={{ fontFamily: "IBM Plex Mono, monospace", color: "#B8B6B1" }}>Ctrl+V</span> (Cmd+V) with this form open to paste a Creator Studio screenshot.
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          e.target.value = "";
+        }}
+      />
+      {status && (
+        <div style={{ fontSize: 11.5, color: statusColor, marginTop: 8, lineHeight: 1.55 }}>
+          {status.kind === "working" ? "⋯ " : status.kind === "done" ? "✓ " : "✕ "}
+          {status.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InputRow({ fieldKey, label, value, onChange, suffix }: { fieldKey: string; label: string; value?: string; onChange: (v: string) => void; suffix?: string }) {
   const tooltip = INPUT_TOOLTIPS[fieldKey];
   return (
     <div style={{ padding: "5px 0" }}>
@@ -612,7 +871,7 @@ function InputRow({ fieldKey, label, onChange, suffix }: { fieldKey: string; lab
           {tooltip && <TooltipIcon tooltip={tooltip} />}
         </div>
         <div className="flex items-center gap-1 flex-1">
-          <input type="number" step="any" placeholder="—" onChange={(e) => onChange(e.target.value)} style={inputStyle} />
+          <input type="number" step="any" placeholder="—" value={value ?? ""} onChange={(e) => onChange(e.target.value)} style={inputStyle} />
           {suffix && <span style={{ fontSize: 11, color: "#6B6964" }}>{suffix}</span>}
         </div>
       </div>

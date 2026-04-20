@@ -503,7 +503,7 @@ function generateRecommendations(
   } else {
     // Cross-platform recommendations for YouTube
     const platformRecs = getPlatformRecommendations(
-      ["youtube", "youtube-shorts", "tiktok", "instagram", "x", "linkedin"],
+      ["youtube", "youtube-shorts", "tiktok", "instagram", "x"],
       topArchetypes,
       avgEng,
       avgVRS

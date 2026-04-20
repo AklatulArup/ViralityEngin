@@ -1,0 +1,62 @@
+name: Track velocity (hourly)
+
+# Hits /api/cron/track-velocity every hour. The endpoint itself decides which
+# videos are due for a sample (1h/3h/6h/12h/24h/48h/72h per platform) and
+# early-exits on the rest, so running hourly is cheap. This exists because
+# Vercel Hobby caps scheduled crons at once per day — GitHub Actions gives us
+# the sub-daily granularity needed for the early-life velocity signal that
+# drives TikTok/IG/X forecast accuracy under 72h.
+#
+# Setup: add CRON_SECRET as a repository secret (Settings → Secrets and
+# variables → Actions). Use the same value as the Vercel env var of the same
+# name. Optionally set DEPLOYMENT_URL as a repo variable to override the
+# default production URL (useful for staging branches).
+
+on:
+  schedule:
+    # Every hour at :05 (offset from Vercel's :30 daily cron to avoid overlap)
+    - cron: "5 * * * *"
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: "Override deployment URL (optional)"
+        required: false
+        type: string
+
+concurrency:
+  group: track-velocity
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Ping velocity tracker
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DEPLOYMENT_URL: ${{ inputs.deployment_url || vars.DEPLOYMENT_URL || 'https://virality-engin.vercel.app' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repo secret is not set. See workflow file header for setup."
+            exit 1
+          fi
+
+          echo "Pinging $DEPLOYMENT_URL/api/cron/track-velocity"
+
+          # --retry handles transient 5xx / network blips. --fail-with-body
+          # makes curl exit non-zero on >=400 while still printing the body
+          # so the failure shows up in the Actions log.
+          response=$(curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-delay 10 --retry-all-errors \
+            --max-time 300 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$DEPLOYMENT_URL/api/cron/track-velocity")
+
+          echo "$response"
+
+          # Sanity check: endpoint returns { ok: true, ... } on success
+          echo "$response" | grep -q '"ok":true' || {
+            echo "::error::Endpoint returned non-ok response"
+            exit 1
+          }
