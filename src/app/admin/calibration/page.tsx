@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { CalibrationReport, LearningAdjustment } from "@/lib/forecast-learning";
 import type { Platform } from "@/lib/forecast";
 
@@ -164,7 +165,33 @@ export default function CalibrationPage() {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ minHeight: "100vh", background: "#0A0A08", color: "#E8E6E1", padding: "32px 48px" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>{children}</div>
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        {/* Back-to-app link — this page renders outside the shell layout
+            (it's a separate /admin route), so without this there's no way
+            to get back to the main app except editing the URL. */}
+        <Link
+          href="/"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: "#8A8883",
+            textDecoration: "none", marginBottom: 20,
+            padding: "6px 12px", borderRadius: 4,
+            border: "1px solid rgba(255,255,255,0.08)",
+            transition: "color 0.15s ease, border-color 0.15s ease",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLAnchorElement).style.color = "#E8E6E1";
+            (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.2)";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLAnchorElement).style.color = "#8A8883";
+            (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.08)";
+          }}
+        >
+          ← FundedNext Intel
+        </Link>
+        {children}
+      </div>
     </div>
   );
 }

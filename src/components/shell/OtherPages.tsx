@@ -32,11 +32,42 @@ export function BulkImportPage() {
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
         <PageHeader title="Bulk CSV Import" sub="Import · Enrich · Save all historical data" />
 
+        {/* Callout pointing RMs to the NEW private-analytics CSV upload path
+            (TikTok Studio / Meta Business Suite exports). That flow lives in
+            the ForecastPanel per-creator — not here — so without this
+            pointer an RM looking at "CSV Import" would assume this page
+            handles it and miss the feature entirely. */}
+        <section style={{
+          ...panelStyle,
+          borderColor: `${T.cyan}33`,
+          background: `${T.cyan}08`,
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: 4,
+              background: `${T.cyan}22`, border: `1px solid ${T.cyan}44`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: T.cyan, fontSize: 12, fontWeight: 600, fontFamily: "IBM Plex Mono, monospace",
+              flexShrink: 0,
+            }}>A</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, color: T.ink, fontWeight: 600, marginBottom: 4 }}>
+                Looking for private-analytics CSV (TikTok Studio / Meta Business Suite)?
+              </div>
+              <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: T.inkMuted, lineHeight: 1.6 }}>
+                Per-post Creator Studio exports (completion %, saves, reach, 3-sec plays) upload from the Forecast panel — after analyzing a TikTok or Instagram creator, use the <span style={{ color: T.cyan }}>&ldquo;Import analytics CSV&rdquo;</span> button next to the screenshot-OCR dropzone. That flow writes to per-creator memory.
+                <br />
+                The CSV importer below is for <span style={{ color: T.ink }}>bulk creator ingestion</span> (URLs + handles) — different purpose.
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section style={panelStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-            <span style={{ fontSize: 14, color: T.ink, fontWeight: 600 }}>Bulk CSV Import</span>
+            <span style={{ fontSize: 14, color: T.ink, fontWeight: 600 }}>Bulk creator import</span>
             <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9.5, letterSpacing: 1.3, color: T.inkFaint, textTransform: "uppercase" }}>
-              Import creators · Extract keywords · Build historical dataset
+              Creators · Videos · Extract keywords · Build historical dataset
             </span>
           </div>
 
@@ -285,11 +316,14 @@ function pickHeatColor(v: number): string {
 
 // ═════════════════════════════ LIBRARIES ═════════════════════════════════
 
+// Each library gets a distinct glyph so the cards read at a glance.
+// Previously every card used the same `▶` triangle, which made the
+// four libraries visually indistinguishable.
 const LIBRARIES = [
-  { id: "keywords",    title: "Keyword Bank Manager", sub: "Niche · competitors · content types · languages", color: T.pink },
-  { id: "hashtags",    title: "Hashtag Bank",         sub: "Tracked hashtags across categories",              color: T.cyan },
-  { id: "competitors", title: "Competitor Bank",      sub: "Tracked prop-firm competitors",                    color: T.amber },
-  { id: "blocklist",   title: "Creator Blocklist",    sub: "System disregards these creators when scraping",  color: T.gray },
+  { id: "keywords",    title: "Keyword Bank Manager", sub: "Niche · competitors · content types · languages", color: T.pink,   icon: "Kw" },
+  { id: "hashtags",    title: "Hashtag Bank",         sub: "Tracked hashtags across categories",              color: T.cyan,   icon: "#" },
+  { id: "competitors", title: "Competitor Bank",      sub: "Tracked prop-firm competitors",                    color: T.amber,  icon: "vs" },
+  { id: "blocklist",   title: "Creator Blocklist",    sub: "System disregards these creators when scraping",  color: T.gray,   icon: "⊘" },
 ];
 
 export function LibrariesPage() {
@@ -309,8 +343,9 @@ export function LibrariesPage() {
               width: 30, height: 30, borderRadius: 4,
               background: `${lib.color}22`, border: `1px solid ${lib.color}44`,
               display: "flex", alignItems: "center", justifyContent: "center",
-              color: lib.color, fontSize: 13,
-            }}>▶</div>
+              color: lib.color, fontSize: lib.icon.length > 1 ? 11 : 14,
+              fontWeight: 600, fontFamily: "IBM Plex Mono, monospace",
+            }}>{lib.icon}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: T.ink, fontWeight: 600 }}>{lib.title}</div>
               <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10.5, color: T.inkFaint, marginTop: 3 }}>{lib.sub}</div>

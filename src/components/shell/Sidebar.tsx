@@ -99,8 +99,25 @@ export default function Sidebar({ route, setRoute, platform, setPlatform, active
                   cursor: "pointer", textAlign: "left", color: "inherit",
                 }}
               >
-                <span style={{ width: 16, color: p.color, fontSize: 12, textAlign: "center" }}>{p.icon}</span>
-                <span style={{ fontSize: 12, color: active ? T.ink : T.inkDim }}>{p.label}</span>
+                {/* Unified indicator: solid platform-color dot + code chip
+                    instead of the old per-platform emoji (▶ ⚡ ♪ ◈ 𝕏) that had
+                    no visual system. Dot + code combined are the identity —
+                    no redundant long label (sidebar is narrow, it wraps). */}
+                <span style={{
+                  width: 8, height: 8, borderRadius: 99,
+                  background: p.color,
+                  boxShadow: active ? `0 0 8px ${p.color}88` : "none",
+                  flexShrink: 0,
+                }} />
+                <span style={{
+                  fontFamily: "IBM Plex Mono, monospace", fontSize: 10, fontWeight: 600,
+                  letterSpacing: 0.5, color: p.color,
+                  width: 32, textAlign: "left", flexShrink: 0,
+                }}>{p.code}</span>
+                <span style={{
+                  fontSize: 12, color: active ? T.ink : T.inkDim,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0,
+                }}>{p.short === p.code ? "(Twitter)" : p.short}</span>
                 {active && (
                   <span style={{
                     marginLeft: "auto", fontFamily: "IBM Plex Mono, monospace", fontSize: 8.5,
@@ -160,21 +177,18 @@ export default function Sidebar({ route, setRoute, platform, setPlatform, active
           </div>
         </SideSection>
 
-        <SideSection title="Tools">
-          <NavRow icon="⚙" title="Reverse Engineer" sub="Script · Hook · Title"         active={route === "reverse"}   onClick={() => setRoute("reverse")} />
-          <NavRow icon="⎙" title="Analysis History" sub="Tracked re-checks"             active={route === "history"}   onClick={() => setRoute("history")} />
-          <NavRow icon="⇪" title="Bulk CSV Import"  sub="Creators · Videos · History"   active={route === "bulk"}      onClick={() => setRoute("bulk")} />
-          <NavRow icon="▦" title="History Calendar" sub="Views · Likes · Shares by date" active={route === "calendar"} onClick={() => setRoute("calendar")} />
-          <NavRow icon="❏" title="Libraries"         sub="Keywords · Tags · Competitors" chev active={route === "libraries"} onClick={() => setRoute("libraries")} />
-          <NavRow icon="↻" title="Reference Tools"   sub="Upload · Browse · Build pool"  chev active={route === "reference"} onClick={() => setRoute("reference")} />
+        <SideSection title="Home">
+          <NavRow icon="◱" title="Landing" sub="Pool coverage · learning accuracy"
+            active={route === "landing"} onClick={() => setRoute("landing")} />
         </SideSection>
 
-        <div style={{ padding: "8px 16px" }}>
-          <NavRow
-            icon="◈" title="Forecast Result" sub="V2 · chart-hero panel"
-            active={route === "forecast"} onClick={() => setRoute("forecast")} accent={T.cyan}
-          />
-        </div>
+        <SideSection title="Tools">
+          <NavRow icon="⚙" title="Reverse Engineer" sub="Script · Hook · Title"            active={route === "reverse"}   onClick={() => setRoute("reverse")} />
+          <NavRow icon="⇪" title="Bulk CSV Import"  sub="Creators · Videos · Historical"   active={route === "bulk"}      onClick={() => setRoute("bulk")} />
+          <NavRow icon="▦" title="History Calendar" sub="Views · Likes · Shares by date"   active={route === "calendar"} onClick={() => setRoute("calendar")} />
+          <NavRow icon="❏" title="Libraries"         sub="Keywords · Hashtags · Competitors · Blocklist" chev active={route === "libraries"} onClick={() => setRoute("libraries")} />
+          <NavRow icon="↻" title="Reference Pool"    sub="Browse every entry · search"     chev active={route === "reference"} onClick={() => setRoute("reference")} />
+        </SideSection>
       </div>
 
       <div style={{ padding: 12, borderTop: `1px solid ${T.line}` }}>
