@@ -514,13 +514,14 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   const lifetime = result.lifetime;
   const horizon = result.horizonDays;
 
-  // V1 editorial narrative — plain-English summary for the hero section.
-  // Built from the forecast result; falls back to result.interpretation
-  // which is already written in RM-friendly language.
-  const narrative = result.interpretation;
-
-  // Tier classification → Distribution stage column copy
-  const tierInfo = tierDisplay(result.lifecycleTier, platform, tokens);
+  // Tier classification — age-aware so a 2-day-old YouTube Long-form isn't
+  // labelled "Evergreen". The display helper now takes the video's age in
+  // days so early-life videos get "Active distribution" / "Audience
+  // expansion" copy instead of the long-tail "Evergreen" bucket.
+  const ageDaysForTier = video.publishedAt
+    ? Math.max(0, (Date.now() - new Date(video.publishedAt).getTime()) / 86_400_000)
+    : 0;
+  const tierInfo = tierDisplay(result.lifecycleTier, platform, tokens, ageDaysForTier);
 
   // "How we got here" signal list for the footer. Derived from the real
   // forecast result, not hard-coded.
@@ -593,17 +594,6 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
             </div>
           </div>
         </div>
-
-        {/* ── V5 Plain-English interpretation ─────────────────────── */}
-        {narrative && (
-          <div>
-            <V5SectionHeader>Plain-English summary</V5SectionHeader>
-            <div style={{
-              padding: "12px 14px", border: `1px solid ${T.line}`, borderRadius: 4,
-              fontSize: 13, color: T.inkDim, lineHeight: 1.6,
-            }}>{narrative}</div>
-          </div>
-        )}
 
         {/* ── V5 Computation notes ────────────────────────────────── */}
         {result.notes.length > 0 && (
@@ -1401,18 +1391,51 @@ function PoolCoverageColumn({ pool }: { pool: PoolCoverageEntry[] }) {
 
 // Map a lifecycle-tier classification into display copy + colour for the
 // "Distribution stage" column. Handles the not-applicable case (YouTube LF
-// and X) with appropriate framing.
+// and X) with appropriate framing — and for YouTube long-form, uses the
+// post's age to pick the right stage label (a 2-day-old video isn't
+// "evergreen", it's still in early distribution).
 function tierDisplay(
   tier: ReturnType<typeof forecast>["lifecycleTier"],
   platform: Platform,
   t: typeof tokens,
+  ageDays: number,
 ): { label: string; sublabel: string; rationale: string; color: string } {
   if (!tier || tier.tier === "not-applicable") {
     if (platform === "youtube") {
+      // YouTube long-form doesn't use the short-form tier classifier, but
+      // age still matters for what the RM should expect.
+      //   0 – 2d   : initial impression push + early retention test
+      //   2 – 14d  : audience expansion (subscribers + suggested)
+      //   14 – 60d : search-led compounding tail
+      //   60d+     : evergreen long-tail
+      if (ageDays < 2) {
+        return {
+          label:     "Initial distribution",
+          sublabel:  `day ${ageDays.toFixed(1)} · first 48h`,
+          rationale: "First 48h is impressions + CTR. YouTube is testing the packaging. Watch retention on the first 30s — that's the gate for suggested-feed expansion.",
+          color:     t.violet,
+        };
+      }
+      if (ageDays < 14) {
+        return {
+          label:     "Audience expansion",
+          sublabel:  `day ${ageDays.toFixed(1)} · week 1–2`,
+          rationale: "Past the impression test. If retention held, suggested feed + subscriber notifications are now doing the heavy lifting. Peak daily views usually fall in this window.",
+          color:     t.sky,
+        };
+      }
+      if (ageDays < 60) {
+        return {
+          label:     "Search tail building",
+          sublabel:  `day ${ageDays.toFixed(1)} · week 2–8`,
+          rationale: "Subscriber-feed push is tapering. Search traffic starts to compound if the title + description match query intent. Evergreen topics accelerate here; time-sensitive ones fade.",
+          color:     t.teal,
+        };
+      }
       return {
-        label:     "Evergreen",
-        sublabel:  "not tier-gated",
-        rationale: "Long-form evergreen — tier classifier does not apply. Search + suggested feed will continue to deliver views for months.",
+        label:     "Evergreen tail",
+        sublabel:  `day ${ageDays.toFixed(0)}+`,
+        rationale: "Long-form evergreen — tier classifier does not apply. Search + suggested feed will continue to deliver views for months. Daily velocity is low but cumulative is what matters.",
         color:     t.sky,
       };
     }
