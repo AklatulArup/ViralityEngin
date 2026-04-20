@@ -14,7 +14,12 @@ import { computeCalibrationFrom, suggestAdjustments, type ForecastSnapshot } fro
 import type { Platform } from "@/lib/forecast";
 
 export const runtime = "nodejs";
-export const revalidate = 60;
+// `dynamic = "force-dynamic"` tells Next.js 16 not to try static generation
+// for this route at build time. It reads `request.url` (query params) and
+// calls KV, both of which are dynamic-server-usage that would otherwise
+// emit a DYNAMIC_SERVER_USAGE error during the build-static-pages phase.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const PLATFORMS: Platform[] = ["youtube", "youtube_short", "tiktok", "instagram", "x"];
 

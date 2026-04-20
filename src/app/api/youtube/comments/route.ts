@@ -6,7 +6,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const revalidate = 3600; // cache 1 hour
+// Reads `videoId` from request.url query — cannot be statically rendered.
+// Next.js caches responses in the edge data cache per-URL up to the
+// revalidate window, so practical cache behaviour is unchanged.
+export const dynamic = "force-dynamic";
+export const revalidate = 3600; // cache 1 hour (data-cache side)
 
 export async function GET(req: NextRequest) {
   try {

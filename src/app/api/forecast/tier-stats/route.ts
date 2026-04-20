@@ -11,7 +11,11 @@ import type { ForecastSnapshot } from "@/lib/forecast-learning";
 import type { Platform } from "@/lib/forecast";
 
 export const runtime = "nodejs";
-export const revalidate = 60;
+// Force dynamic rendering — this route reads from KV at request time and
+// must never be statically pre-rendered at build (KV isn't accessible /
+// deterministic during the build step).
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const PLATFORMS: Platform[] = ["tiktok", "instagram", "youtube_short"];   // tier-applicable only
 const ALL_TIERS = [
