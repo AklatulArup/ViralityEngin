@@ -34,6 +34,7 @@ import LandingPage from "./LandingPage";
 import ReverseEnginePage from "./ReverseEnginePage";
 import { BulkImportPage, CalendarPage, LibrariesPage, ReferencePoolPage } from "./OtherPages";
 import Dashboard from "@/components/Dashboard";
+import { sidebarCounts, type MinimalEntry } from "@/lib/pool-stats";
 
 const STORAGE_KEY = "ve_route";
 
@@ -76,27 +77,19 @@ export default function NewDashboard() {
     return () => window.removeEventListener("ve:open-war-room", handler);
   }, []);
 
-  // Fetch pool stats for the sidebar tiles. Refetches on mount AND whenever
-  // legacy Dashboard fires `ve:pool-updated` after a successful analyze →
-  // reference-store/keyword-bank write. This keeps the sidebar numbers live
-  // without polling.
+  // Fetch pool stats for the sidebar tiles. Uses the SAME `sidebarCounts`
+  // helper (and therefore the same bucketer) as the LandingPage's Pool
+  // Coverage panel, so the two surfaces always agree on videos/creators/
+  // shorts counts. Refetches on mount AND on `ve:pool-updated` so the
+  // tiles tick up live as the user analyses new URLs.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const refresh = () => {
       fetch("/api/reference-store")
         .then(r => r.ok ? r.json() : null)
         .then(d => {
-          const entries = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
-          const creators = new Set<string>();
-          let shorts = 0;
-          for (const e of entries) {
-            const handle = (e?.channelName ?? e?.name) as string | undefined;
-            if (handle) creators.add(handle);
-            const duration   = Number(e?.durationSeconds ?? 0);
-            const format     = e?.videoFormat as string | undefined;
-            const platformId = e?.platform    as string | undefined;
-            if (platformId === "youtube_short" || format === "short" || (duration > 0 && duration <= 60)) shorts++;
-          }
+          const entries: MinimalEntry[] = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
+          const { videos, creators, shorts } = sidebarCounts(entries);
           fetch("/api/keyword-bank")
             .then(r => r.ok ? r.json() : null)
             .then(kb => {
@@ -104,9 +97,9 @@ export default function NewDashboard() {
               const keywords = Object.values(cats).reduce<number>((n, arr) => {
                 return n + (Array.isArray(arr) ? arr.length : 0);
               }, 0);
-              setPoolStats({ videos: entries.length, creators: creators.size, shorts, keywords });
+              setPoolStats({ videos, creators, shorts, keywords });
             })
-            .catch(() => setPoolStats({ videos: entries.length, creators: creators.size, shorts, keywords: 0 }));
+            .catch(() => setPoolStats({ videos, creators, shorts, keywords: 0 }));
         })
         .catch(() => {});
     };

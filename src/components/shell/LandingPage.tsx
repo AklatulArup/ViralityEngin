@@ -1,46 +1,25 @@
 "use client";
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LANDING PAGE — V5 data-dense two-column
+// LANDING PAGE — V5 data-dense two-column, live-refreshing pool coverage
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Main column: bordered-cell pool status row + coverage bars + per-platform
-// table + live signal feed table. Right rail: total reach, per-platform bars,
-// next milestone, learning loop stats. No starfield, no pulse, no glow.
+// Main column: redesigned Pool Coverage panel (header with live total +
+// last-ingested timestamp, three coverage bars, platform table sorted by
+// count) + Live Signal Feed. Right rail: total reach, per-platform bars,
+// next milestone, learning loop stats, last ingestions.
+//
+// Data comes from `/api/reference-store` and flows through `computePoolStats`
+// (src/lib/pool-stats.ts) — the same bucketer the Sidebar uses, so the two
+// surfaces are guaranteed to agree.
 
 import React, { useEffect, useMemo, useState } from "react";
 import { T, PLATFORMS } from "@/lib/design-tokens";
+import { computePoolStats, type MinimalEntry, type PlatformRow } from "@/lib/pool-stats";
 import type { Platform } from "@/lib/forecast";
 
-interface ReferenceEntry {
-  id?:       string;
-  platform?: Platform;
-  type?:     string;
-  name?:     string;
-  channelName?: string;
-  metrics?:  Record<string, number | string>;
-}
-
-interface PlatformPoolRow {
-  id:       Platform;
-  count:    number;
-  creators: number;
-  color:    string;
-  min:      number;
-  std:      number;
-  mat:      number;
-}
-
-const PLATFORM_TARGETS: Record<Platform, { min: number; std: number; mat: number }> = {
-  youtube:       { min: 500, std: 1950, mat: 3800 },
-  youtube_short: { min: 150, std: 400,  mat: 150  },
-  instagram:     { min: 150, std: 400,  mat: 150  },
-  tiktok:        { min: 150, std: 400,  mat: 150  },
-  x:             { min: 400, std: 800,  mat: 1600 },
-};
-
 export default function LandingPage() {
-  const [entries, setEntries] = useState<ReferenceEntry[]>([]);
+  const [entries, setEntries] = useState<MinimalEntry[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -48,269 +27,417 @@ export default function LandingPage() {
       fetch("/api/reference-store")
         .then(r => r.ok ? r.json() : null)
         .then(d => {
-          const arr: ReferenceEntry[] = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
+          const arr: MinimalEntry[] = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
           setEntries(arr);
         })
         .catch(() => {});
     };
     refresh();
-    // Refetch live when legacy Dashboard's analyze pipeline writes to the
-    // reference store or keyword bank.
+    // Live refresh: legacy Dashboard fires ve:pool-updated after every
+    // successful analyze / bulk import / reference-store POST.
     window.addEventListener("ve:pool-updated", refresh);
     return () => window.removeEventListener("ve:pool-updated", refresh);
   }, []);
 
-  const pool = useMemo(() => {
-    const byPlatform: Record<Platform, { count: number; creators: Set<string> }> = {
-      youtube:       { count: 0, creators: new Set() },
-      youtube_short: { count: 0, creators: new Set() },
-      instagram:     { count: 0, creators: new Set() },
-      tiktok:        { count: 0, creators: new Set() },
-      x:             { count: 0, creators: new Set() },
-    };
-    for (const e of entries) {
-      const p = e?.platform;
-      if (!p || !(p in byPlatform)) continue;
-      // YouTube entries are ingested with platform="youtube" regardless of
-      // short vs long-form; only `videoFormat` or `durationSeconds` distinguish
-      // them. Re-bucket a YouTube entry into `youtube_short` when it's flagged
-      // or has a short duration, so YTS in the Pool Coverage panel stops
-      // showing 0 while Sidebar "Shorts" shows hundreds.
-      let bucket: Platform = p;
-      if (p === "youtube") {
-        const dRaw = (e as unknown as { durationSeconds?: number }).durationSeconds;
-        const fmt  = (e as unknown as { videoFormat?: string }).videoFormat;
-        const d    = typeof dRaw === "number" ? dRaw : 0;
-        if (fmt === "short" || (d > 0 && d <= 60)) bucket = "youtube_short";
-      }
-      byPlatform[bucket].count += 1;
-      const handle = e.channelName ?? e.name;
-      if (handle) byPlatform[bucket].creators.add(handle);
-    }
-    const total = Object.values(byPlatform).reduce((s, v) => s + v.count, 0);
-    const allCreators = new Set<string>();
-    for (const v of Object.values(byPlatform)) v.creators.forEach(c => allCreators.add(c));
-
-    const rows: PlatformPoolRow[] = (Object.keys(byPlatform) as Platform[]).map(id => {
-      const row = byPlatform[id];
-      const targets = PLATFORM_TARGETS[id];
-      return {
-        id,
-        count:    row.count,
-        creators: row.creators.size,
-        color:    PLATFORMS[id].color,
-        min:      targets.min,
-        std:      targets.std,
-        mat:      targets.mat,
-      };
-    });
-
-    const grand = {
-      current: total,
-      min: Object.values(PLATFORM_TARGETS).reduce((s, t) => s + t.min, 0),
-      std: Object.values(PLATFORM_TARGETS).reduce((s, t) => s + t.std, 0),
-      mat: Object.values(PLATFORM_TARGETS).reduce((s, t) => s + t.mat, 0),
-    };
-
-    const totalViews = entries.reduce((s, e) => s + Number(e.metrics?.views ?? 0), 0);
-    // durationSeconds + videoFormat live at the TOP level of ReferenceEntry,
-    // not inside metrics. Platform `youtube_short` also counts as short.
-    const shorts = entries.filter(e => {
-      const d   = Number((e as ReferenceEntry & { durationSeconds?: number }).durationSeconds ?? 0);
-      const f   = (e as ReferenceEntry & { videoFormat?: string }).videoFormat;
-      return e.platform === "youtube_short" || f === "short" || (d > 0 && d <= 60);
-    }).length;
-    const full = entries.filter(e => {
-      const d   = Number((e as ReferenceEntry & { durationSeconds?: number }).durationSeconds ?? 0);
-      const f   = (e as ReferenceEntry & { videoFormat?: string }).videoFormat;
-      return f === "full" || (d > 60);
-    }).length;
-
-    return { rows, total, creators: allCreators.size, grand, totalViews, shorts, full };
-  }, [entries]);
+  const stats = useMemo(() => computePoolStats(entries), [entries]);
 
   const signals = useMemo(() => {
     const hasEntries = entries.length > 0;
-    const vrsValues = entries.map(e => Number(e.metrics?.vrsScore ?? 0)).filter(v => v > 0);
-    const avgVRS = vrsValues.length > 0 ? vrsValues.reduce((s, v) => s + v, 0) / vrsValues.length : 0;
-    const engValues = entries.map(e => Number(e.metrics?.engagement ?? 0)).filter(v => v > 0);
-    const avgEng = engValues.length > 0 ? engValues.reduce((s, v) => s + v, 0) / engValues.length : 0;
+    const vrs = entries.map(e => Number(e.metrics?.vrsScore ?? 0)).filter(v => v > 0);
+    const avgVRS = vrs.length > 0 ? vrs.reduce((s, v) => s + v, 0) / vrs.length : 0;
+    const eng = entries.map(e => Number(e.metrics?.engagement ?? 0)).filter(v => v > 0);
+    const avgEng = eng.length > 0 ? eng.reduce((s, v) => s + v, 0) / eng.length : 0;
     const highVRS = entries.filter(e => Number(e.metrics?.vrsScore ?? 0) >= 80).length;
-    const topCreator = [...entries].sort((a, b) => Number(b.metrics?.vrsScore ?? 0) - Number(a.metrics?.vrsScore ?? 0))[0];
-
+    const totalViews = entries.reduce((s, e) => s + Number(e.metrics?.views ?? 0), 0);
     return [
-      { label: "Reference pool depth",   value: `${fmtCompact(pool.total)} videos`,            color: T.red,    active: hasEntries },
-      { label: "Pool avg VRS score",     value: avgVRS > 0 ? `${avgVRS.toFixed(0)}/100` : "—", color: T.amber,  active: avgVRS >= 60 },
-      { label: "Pool avg engagement",    value: avgEng > 0 ? `${avgEng.toFixed(1)}%` : "—",    color: T.amber,  active: avgEng > 0 },
-      { label: "High-VRS content (≥80)", value: `${highVRS} videos`,                           color: T.green,  active: highVRS > 0 },
-      { label: "Creators in pool",       value: `${fmtCompact(pool.creators)}`,                color: T.red,    active: pool.creators > 0 },
-      { label: "Top VRS",                value: topCreator?.name
-                                                     ? `${topCreator.name.slice(0, 24)} · ${Number(topCreator.metrics?.vrsScore ?? 0).toFixed(0)}/100`
-                                                     : "—",                                    color: T.cyan,   active: !!topCreator },
+      { label: "Pool depth",              value: `${fmtCompact(stats.totalEntries)} items`,                                      color: T.red,    active: hasEntries },
+      { label: "Unique creators",         value: `${fmtCompact(stats.totalCreators)}`,                                            color: T.red,    active: stats.totalCreators > 0 },
+      { label: "Total reach",             value: totalViews > 0 ? `${fmtCompact(totalViews)} views` : "—",                       color: T.purple, active: totalViews > 0 },
+      { label: "Avg VRS",                 value: avgVRS > 0 ? `${avgVRS.toFixed(0)}/100` : "—",                                  color: T.amber,  active: avgVRS >= 60 },
+      { label: "Avg engagement",          value: avgEng > 0 ? `${avgEng.toFixed(1)}%` : "—",                                     color: T.amber,  active: avgEng > 0 },
+      { label: "High-VRS content (≥80)",  value: `${highVRS} videos`,                                                             color: T.green,  active: highVRS > 0 },
     ];
-  }, [entries, pool]);
+  }, [entries, stats]);
+
+  // 5 most recent ingestions for the right-rail feed.
+  const recent = useMemo(() => {
+    return [...entries]
+      .filter(e => typeof e.analyzedAt === "string")
+      .sort((a, b) => (b.analyzedAt ?? "").localeCompare(a.analyzedAt ?? ""))
+      .slice(0, 5);
+  }, [entries]);
 
   return (
     <div style={{
       display: "grid", gridTemplateColumns: "1fr 320px",
       height: "100%", color: T.ink, fontFamily: "IBM Plex Sans, sans-serif",
     }}>
-      {/* ── MAIN ─────────────────────────────────────────────────── */}
+      {/* ── MAIN ────────────────────────────────────────────────── */}
       <main style={{ padding: "22px 26px", display: "flex", flexDirection: "column", gap: 22, borderRight: `1px solid ${T.line}`, overflowY: "auto" }}>
-
-        {/* Pool status */}
-        <div>
-          <V5SectionHeader>Pool status</V5SectionHeader>
-          <div style={{
-            display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr",
-            border: `1px solid ${T.line}`, borderRadius: 4, overflow: "hidden",
-          }}>
-            <V5Cell big label="Pool size"
-              value={pool.total.toLocaleString()}
-              sub={`videos · ${pool.creators.toLocaleString()} creators`}
-              color={T.ink} />
-            <V5Cell label="To standard"
-              value={Math.max(0, pool.grand.std - pool.total).toLocaleString()}
-              sub="reliable" />
-            <V5Cell label="To mature"
-              value={Math.max(0, pool.grand.mat - pool.total).toLocaleString()}
-              sub="niche patterns" />
-            <V5Cell label="Total views"
-              value={fmtCompact(pool.totalViews)}
-              sub="across pool"
-              color={T.green} />
-          </div>
-        </div>
-
-        {/* Coverage targets */}
-        <div>
-          <V5SectionHeader>Coverage targets</V5SectionHeader>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, border: `1px solid ${T.line}`, borderRadius: 4, padding: "14px 16px" }}>
-            <CoverageBar label="Mergeable minimum" sub="engine functions"        color={T.amber} cur={pool.grand.current} target={pool.grand.min} />
-            <CoverageBar label="Standard target"   sub="reliable benchmarking"   color={T.blue}  cur={pool.grand.current} target={pool.grand.std} />
-            <CoverageBar label="Mature pool"       sub="niche-specific patterns" color={T.green} cur={pool.grand.current} target={pool.grand.mat} />
-          </div>
-        </div>
-
-        {/* Composition + per-platform table */}
-        <div>
-          <V5SectionHeader>Composition · by platform</V5SectionHeader>
-          <CompositionBar rows={pool.rows} />
-          <div style={{ marginTop: 10, border: `1px solid ${T.line}`, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{
-              display: "grid", gridTemplateColumns: "70px 1.2fr 70px 70px 1fr",
-              padding: "8px 12px", background: T.bgRow,
-              fontFamily: "IBM Plex Mono, monospace", fontSize: 9, letterSpacing: 1.2,
-              textTransform: "uppercase", color: T.inkFaint,
-              borderBottom: `1px solid ${T.line}`,
-            }}>
-              <div>Platform</div><div>Status</div>
-              <div style={{ textAlign: "right" }}>Videos</div>
-              <div style={{ textAlign: "right" }}>Creators</div>
-              <div style={{ textAlign: "right" }}>To minimum</div>
-            </div>
-            {pool.rows.map((row, i) => <PlatformRow key={row.id} row={row} last={i === pool.rows.length - 1} />)}
-          </div>
-        </div>
-
-        {/* Live signal feed as table */}
-        <div>
-          <V5SectionHeader>Live signal feed</V5SectionHeader>
-          <div style={{ border: `1px solid ${T.line}`, borderRadius: 4 }}>
-            {signals.map((s, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center",
-                  padding: "10px 14px",
-                  borderBottom: i < signals.length - 1 ? `1px solid ${T.line}` : "none",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ width: 5, height: 5, borderRadius: 99, background: s.color, opacity: s.active ? 1 : 0.3, flexShrink: 0 }} />
-                  <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 12, color: T.inkDim }}>{s.label}</span>
-                </div>
-                <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 12, color: s.active ? s.color : T.inkFaint }}>{s.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <PoolCoverage stats={stats} />
+        <LiveSignalFeed signals={signals} />
       </main>
 
       {/* ── RIGHT RAIL ──────────────────────────────────────────── */}
       <aside style={{ padding: "22px 22px", display: "flex", flexDirection: "column", gap: 22, background: T.bgDeep, overflowY: "auto" }}>
-        <div>
-          <V5SectionHeader>Total reach</V5SectionHeader>
-          <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 22, fontWeight: 300, color: T.ink, letterSpacing: -0.5 }}>
-            {fmtCompact(pool.totalViews)}
-          </div>
-          <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint, marginTop: 3 }}>
-            views across pool · {pool.full.toLocaleString()} full + {pool.shorts.toLocaleString()} short
-          </div>
-        </div>
-
-        <div>
-          <V5SectionHeader>Coverage · per platform</V5SectionHeader>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {pool.rows.map(pl => {
-              const plObj = PLATFORMS[pl.id];
-              const pct = pl.count / Math.max(1, pl.mat);
-              return (
-                <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }}>
-                  <span style={{ width: 5, height: 5, borderRadius: 99, background: plObj.color }} />
-                  <span style={{ flex: 1, color: T.inkMuted }}>{plObj.code}</span>
-                  <span style={{ color: T.inkFaint, width: 44, textAlign: "right" }}>{pl.count.toLocaleString()}</span>
-                  <div style={{ width: 36, height: 3, background: T.line, borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ width: `${Math.min(100, pct * 100)}%`, height: "100%", background: plObj.color, opacity: 0.7 }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div>
-          <V5SectionHeader>Next milestone</V5SectionHeader>
-          <div style={{ fontSize: 13, color: T.ink, lineHeight: 1.5 }}>
-            <span style={{ color: T.green }}>{Math.max(0, pool.grand.mat - pool.total).toLocaleString()} videos</span> to mature pool
-          </div>
-          <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint, marginTop: 5, lineHeight: 1.6 }}>
-            Above mature pool ({pool.grand.mat.toLocaleString()} videos) the engine begins surfacing niche-specific patterns. Continue importing to accelerate.
-          </div>
-        </div>
-
-        <div>
-          <V5SectionHeader>Learning loop</V5SectionHeader>
-          <div style={{ border: `1px solid ${T.line}`, borderRadius: 4 }}>
-            {([
-              ["last forecast resolved", "—"],
-              ["MdAPE (30d rolling)",    "—"],
-              ["coverage bias",          "—"],
-              ["high-VRS hit rate",      "—"],
-            ] as const).map((row, i, arr) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex", justifyContent: "space-between",
-                  padding: "8px 12px", fontFamily: "IBM Plex Mono, monospace", fontSize: 11,
-                  borderBottom: i < arr.length - 1 ? `1px solid ${T.line}` : "none",
-                }}
-              >
-                <span style={{ color: T.inkDim }}>{row[0]}</span>
-                <span style={{ color: T.ink }}>{row[1]}</span>
-              </div>
-            ))}
-          </div>
-          <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9.5, color: T.inkFaint, marginTop: 6 }}>
-            populated once forecasts mature · see /admin/calibration
-          </div>
-        </div>
+        <RailTotal entries={entries} stats={stats} />
+        <RailPlatformBars rows={stats.rows} />
+        <RailNextMilestone stats={stats} />
+        <RailRecentIngestions recent={recent} />
+        <RailLearningLoop />
       </aside>
     </div>
   );
 }
 
-// ─── V5 PRIMITIVES (local copies — forecasts use the same pattern) ───
+// ─── POOL COVERAGE PANEL (main) ─────────────────────────────────────────
+
+function PoolCoverage({ stats }: { stats: ReturnType<typeof computePoolStats> }) {
+  const lastAgo = fmtAgo(stats.lastIngestedAt);
+  const youtubeRow = stats.rows.find(r => r.id === "youtube");
+  return (
+    <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
+        <div>
+          <V5SectionHeader>Pool coverage · learning accuracy</V5SectionHeader>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 6, height: 6, borderRadius: 99, background: T.green, boxShadow: `0 0 8px ${T.green}` }} />
+          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.green, letterSpacing: 1 }}>LIVE</span>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12, color: T.inkMuted, lineHeight: 1.55, marginTop: -6 }}>
+        Updates in real-time as you analyse content or bulk-import creators. The more entries the pool has, the more accurate the forecast engine becomes.
+      </div>
+
+      {/* Top row: big pool size + last ingested + skipped warning */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr",
+        border: `1px solid ${T.line}`, borderRadius: 4, overflow: "hidden",
+      }}>
+        <V5Cell
+          big
+          label="Pool size"
+          value={stats.totalEntries.toLocaleString()}
+          sub={`${stats.totalCreators.toLocaleString()} creators · last added ${lastAgo}`}
+          color={T.ink}
+        />
+        <V5Cell
+          label="Long-form"
+          value={stats.totalLong.toLocaleString()}
+          sub="YT watch URLs"
+          color={T.red}
+        />
+        <V5Cell
+          label="Shorts"
+          value={stats.totalShorts.toLocaleString()}
+          sub="YT Shorts bucket"
+          color={T.pink}
+        />
+        <V5Cell
+          label="Other platforms"
+          value={(stats.totalEntries - stats.totalLong - stats.totalShorts).toLocaleString()}
+          sub="TikTok + IG + X"
+          color={T.cyan}
+        />
+      </div>
+
+      {/* Coverage targets */}
+      <div>
+        <V5SectionHeader>Coverage targets</V5SectionHeader>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, border: `1px solid ${T.line}`, borderRadius: 4, padding: "14px 16px" }}>
+          <CoverageBar label="Workable minimum" sub="engine functions"        color={T.amber} cur={stats.grand.current} target={stats.grand.min} />
+          <CoverageBar label="Standard target"  sub="reliable benchmarking"   color={T.blue}  cur={stats.grand.current} target={stats.grand.std} />
+          <CoverageBar label="Mature pool"      sub="niche-specific patterns" color={T.green} cur={stats.grand.current} target={stats.grand.mat} />
+        </div>
+      </div>
+
+      {/* Per platform — one table, dense, sorted by count */}
+      <div>
+        <V5SectionHeader>Per platform — sorted by count</V5SectionHeader>
+        <div style={{ border: `1px solid ${T.line}`, borderRadius: 4, overflow: "hidden" }}>
+          <div style={tableHeaderStyle}>
+            <div>Platform</div>
+            <div style={{ textAlign: "right" }}>Videos</div>
+            <div style={{ textAlign: "right" }}>Creators</div>
+            <div style={{ textAlign: "right" }}>% of pool</div>
+            <div>Status</div>
+            <div>Progress</div>
+            <div style={{ textAlign: "right" }}>Next</div>
+          </div>
+          {stats.rows.map((row, i) => (
+            <PlatformTableRow
+              key={row.id} row={row}
+              last={i === stats.rows.length - 1}
+            />
+          ))}
+          {stats.skipped > 0 && (
+            <div style={{
+              padding: "8px 12px", fontFamily: "IBM Plex Mono, monospace",
+              fontSize: 10, color: T.inkFaint,
+              background: T.bgRow, borderTop: `1px solid ${T.line}`,
+            }}>
+              {stats.skipped} entr{stats.skipped === 1 ? "y" : "ies"} skipped — missing platform field
+            </div>
+          )}
+        </div>
+        {youtubeRow && stats.totalShorts > 0 && (
+          <div style={{
+            fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint,
+            marginTop: 6, lineHeight: 1.55,
+          }}>
+            YouTube is split by format: long-form (watch URLs) vs. shorts (videoFormat&nbsp;=&nbsp;&quot;short&quot;). Both count toward the YouTube coverage milestones.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ─── LIVE SIGNAL FEED (main, below pool coverage) ──────────────────────
+
+function LiveSignalFeed({ signals }: { signals: Array<{ label: string; value: string; color: string; active: boolean }> }) {
+  return (
+    <div>
+      <V5SectionHeader>Live signal feed</V5SectionHeader>
+      <div style={{ border: `1px solid ${T.line}`, borderRadius: 4 }}>
+        {signals.map((s, i) => (
+          <div
+            key={i}
+            style={{
+              display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center",
+              padding: "10px 14px",
+              borderBottom: i < signals.length - 1 ? `1px solid ${T.line}` : "none",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ width: 5, height: 5, borderRadius: 99, background: s.color, opacity: s.active ? 1 : 0.3, flexShrink: 0 }} />
+              <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 12, color: T.inkDim }}>{s.label}</span>
+            </div>
+            <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 12, color: s.active ? s.color : T.inkFaint }}>{s.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── PLATFORM TABLE ROW ───────────────────────────────────────────────
+
+function PlatformTableRow({ row, last }: { row: PlatformRow; last: boolean }) {
+  const pl = PLATFORMS[row.id];
+  const remaining = row.nextTarget === null ? 0 : Math.max(0, row.nextTarget - row.count);
+  const pctToNext = row.nextTarget === null ? 1 : Math.min(1, row.count / row.nextTarget);
+  const statusColor =
+    row.status === "mature"     ? T.green :
+    row.status === "standard"   ? T.blue  :
+    row.status === "functional" ? T.amber :
+    row.status === "below-min"  ? T.amber :
+                                   T.inkMuted;
+  const statusText =
+    row.status === "mature"     ? "mature" :
+    row.status === "standard"   ? "standard" :
+    row.status === "functional" ? "workable" :
+    row.status === "below-min"  ? "below min" :
+                                   "empty";
+  const nextText =
+    row.nextTarget === null ? "✓ mature" :
+    remaining === 0         ? "✓"         :
+                               `${fmtCompact(remaining)} to ${row.label ?? "next"}`;
+
+  return (
+    <div style={{
+      display: "grid", gridTemplateColumns: "110px 70px 80px 70px 90px 1fr 120px",
+      padding: "9px 12px", alignItems: "center",
+      fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: T.inkDim,
+      borderBottom: last ? "none" : `1px solid ${T.line}`,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: pl.color }} />
+        <span style={{ color: pl.color, fontWeight: 600 }}>{pl.code}</span>
+        <span style={{ color: T.inkFaint, fontSize: 10 }}>{pl.short}</span>
+      </div>
+      <div style={{ textAlign: "right", color: row.count > 0 ? T.ink : T.inkFaint }}>
+        {row.count.toLocaleString()}
+      </div>
+      <div style={{ textAlign: "right" }}>{row.creators.toLocaleString()}</div>
+      <div style={{ textAlign: "right" }}>
+        {row.pct > 0 ? `${row.pct.toFixed(1)}%` : "—"}
+      </div>
+      <div style={{ color: statusColor }}>{statusText}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 99, overflow: "hidden" }}>
+          <div style={{ width: `${pctToNext * 100}%`, height: "100%", background: pl.color, opacity: 0.7 }} />
+        </div>
+      </div>
+      <div style={{ textAlign: "right", color: row.nextTarget === null ? T.green : T.inkFaint }}>
+        {nextText}
+      </div>
+    </div>
+  );
+}
+
+// ─── COVERAGE BAR (grand totals) ───────────────────────────────────────
+
+function CoverageBar({ label, sub, color, cur, target }: { label: string; sub: string; color: string; cur: number; target: number }) {
+  const pct = target > 0 ? Math.min(1, cur / target) : 0;
+  const met = cur >= target;
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 5 }}>
+        <span style={{ width: 5, height: 5, borderRadius: 99, background: color }} />
+        <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: T.ink }}>{label}</span>
+        <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint }}>· {sub}</span>
+        <span style={{ marginLeft: "auto", fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: met ? T.green : T.inkDim }}>
+          {met && "✓ "}{cur.toLocaleString()} / {target.toLocaleString()}
+        </span>
+      </div>
+      <div style={{ height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 99 }}>
+        <div style={{ height: "100%", width: `${pct * 100}%`, background: color, opacity: 0.8, borderRadius: 99 }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── RIGHT RAIL SECTIONS ───────────────────────────────────────────────
+
+function RailTotal({ entries, stats }: { entries: MinimalEntry[]; stats: ReturnType<typeof computePoolStats> }) {
+  const totalViews = entries.reduce((s, e) => s + Number(e.metrics?.views ?? 0), 0);
+  return (
+    <div>
+      <V5SectionHeader>Total reach</V5SectionHeader>
+      <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 22, fontWeight: 300, color: T.ink, letterSpacing: -0.5 }}>
+        {fmtCompact(totalViews)}
+      </div>
+      <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint, marginTop: 3 }}>
+        views across {stats.totalEntries.toLocaleString()} entries
+      </div>
+    </div>
+  );
+}
+
+function RailPlatformBars({ rows }: { rows: PlatformRow[] }) {
+  return (
+    <div>
+      <V5SectionHeader>Coverage · per platform</V5SectionHeader>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        {rows.map(pl => {
+          const plObj = PLATFORMS[pl.id];
+          const pct = pl.count / Math.max(1, pl.mat);
+          return (
+            <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }}>
+              <span style={{ width: 5, height: 5, borderRadius: 99, background: plObj.color }} />
+              <span style={{ flex: 1, color: T.inkMuted }}>{plObj.code}</span>
+              <span style={{ color: T.inkFaint, width: 44, textAlign: "right" }}>{pl.count.toLocaleString()}</span>
+              <div style={{ width: 36, height: 3, background: T.line, borderRadius: 99, overflow: "hidden" }}>
+                <div style={{ width: `${Math.min(100, pct * 100)}%`, height: "100%", background: plObj.color, opacity: 0.7 }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RailNextMilestone({ stats }: { stats: ReturnType<typeof computePoolStats> }) {
+  const toMature = Math.max(0, stats.grand.mat - stats.totalEntries);
+  const toStd    = Math.max(0, stats.grand.std - stats.totalEntries);
+  const toMin    = Math.max(0, stats.grand.min - stats.totalEntries);
+  const nextLabel =
+    toMin > 0     ? { n: toMin,    label: "workable minimum", color: T.amber } :
+    toStd > 0     ? { n: toStd,    label: "standard target",  color: T.blue  } :
+                    { n: toMature, label: "mature pool",      color: T.green };
+  return (
+    <div>
+      <V5SectionHeader>Next milestone</V5SectionHeader>
+      <div style={{ fontSize: 13, color: T.ink, lineHeight: 1.5 }}>
+        <span style={{ color: nextLabel.color }}>
+          {nextLabel.n > 0 ? `${nextLabel.n.toLocaleString()} entries` : "✓ all milestones hit"}
+        </span>
+        {nextLabel.n > 0 && <> to <strong style={{ fontWeight: 500 }}>{nextLabel.label}</strong></>}
+      </div>
+      <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint, marginTop: 5, lineHeight: 1.6 }}>
+        Bulk-import or paste a URL to grow the pool — every analyzed creator adds their recent videos too.
+      </div>
+    </div>
+  );
+}
+
+function RailRecentIngestions({ recent }: { recent: MinimalEntry[] }) {
+  if (recent.length === 0) {
+    return (
+      <div>
+        <V5SectionHeader>Last ingestions</V5SectionHeader>
+        <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint, fontStyle: "italic" }}>
+          none yet — paste a URL to start
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <V5SectionHeader>Last {recent.length} ingestions</V5SectionHeader>
+      <div style={{ border: `1px solid ${T.line}`, borderRadius: 4 }}>
+        {recent.map((e, i) => {
+          const pl = e.platform && e.platform in PLATFORMS ? PLATFORMS[e.platform as Platform] : null;
+          return (
+            <div key={i} style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "8px 10px",
+              borderBottom: i < recent.length - 1 ? `1px solid ${T.line}` : "none",
+              fontFamily: "IBM Plex Mono, monospace", fontSize: 10,
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: 99, background: pl?.color ?? T.inkFaint, flexShrink: 0 }} />
+              <span style={{ color: T.inkFaint, width: 44, flexShrink: 0 }}>{fmtAgo(e.analyzedAt ?? null)}</span>
+              <span style={{ color: pl ? pl.color : T.inkMuted, width: 32, flexShrink: 0 }}>{pl?.code ?? "—"}</span>
+              <span style={{
+                flex: 1, color: T.inkDim,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>
+                {e.name || e.title || e.channelName || "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RailLearningLoop() {
+  return (
+    <div>
+      <V5SectionHeader>Learning loop</V5SectionHeader>
+      <div style={{ border: `1px solid ${T.line}`, borderRadius: 4 }}>
+        {([
+          ["MdAPE (30d rolling)",    "see /admin/calibration"],
+          ["Coverage bias",          "—"],
+          ["Conformal strata ready", "—"],
+        ] as const).map((row, i, arr) => (
+          <div
+            key={i}
+            style={{
+              display: "flex", justifyContent: "space-between",
+              padding: "8px 12px", fontFamily: "IBM Plex Mono, monospace", fontSize: 11,
+              borderBottom: i < arr.length - 1 ? `1px solid ${T.line}` : "none",
+            }}
+          >
+            <span style={{ color: T.inkDim }}>{row[0]}</span>
+            <span style={{ color: T.ink }}>{row[1]}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9.5, color: T.inkFaint, marginTop: 6 }}>
+        populated once outcomes mature · /admin/calibration
+      </div>
+    </div>
+  );
+}
+
+// ─── V5 PRIMITIVES + HELPERS ───────────────────────────────────────────
 
 function V5SectionHeader({ children }: { children: React.ReactNode }) {
   return (
@@ -348,70 +475,35 @@ function V5Cell({ label, value, sub, big, color }: { label: string; value: strin
   );
 }
 
-function CoverageBar({ label, sub, color, cur, target }: { label: string; sub: string; color: string; cur: number; target: number }) {
-  const pct = target > 0 ? Math.min(1, cur / target) : 0;
-  return (
-    <div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 5 }}>
-        <span style={{ width: 5, height: 5, borderRadius: 99, background: color }} />
-        <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: T.ink }}>{label}</span>
-        <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint }}>· {sub}</span>
-        <span style={{ marginLeft: "auto", fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: T.inkDim }}>
-          {cur.toLocaleString()} / {target.toLocaleString()}
-        </span>
-      </div>
-      <div style={{ height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 99 }}>
-        <div style={{ height: "100%", width: `${pct * 100}%`, background: color, opacity: 0.8, borderRadius: 99 }} />
-      </div>
-    </div>
-  );
-}
-
-function CompositionBar({ rows }: { rows: PlatformPoolRow[] }) {
-  const total = rows.reduce((s, p) => s + p.count, 0);
-  return (
-    <div style={{ height: 8, display: "flex", borderRadius: 2, overflow: "hidden", background: "rgba(255,255,255,0.04)", border: `1px solid ${T.line}` }}>
-      {rows.map(p => {
-        const w = total > 0 ? (p.count / total) * 100 : 0;
-        return w > 0 ? <div key={p.id} style={{ width: `${w}%`, background: p.color, opacity: 0.75 }} /> : null;
-      })}
-    </div>
-  );
-}
-
-function PlatformRow({ row, last }: { row: PlatformPoolRow; last: boolean }) {
-  const pl = PLATFORMS[row.id];
-  const status =
-    row.count >= row.mat ? "mature" :
-    row.count >= row.std ? "standard" :
-    row.count >= row.min ? "functional" :
-    row.count === 0      ? "empty" :
-                            "below min";
-  const statusColor =
-    row.count >= row.mat ? T.green :
-    row.count >= row.std ? T.blue :
-    row.count >= row.min ? T.amber :
-                            T.inkMuted;
-  return (
-    <div style={{
-      display: "grid", gridTemplateColumns: "70px 1.2fr 70px 70px 1fr",
-      padding: "10px 12px", alignItems: "center",
-      fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: T.inkDim,
-      borderBottom: last ? "none" : `1px solid ${T.line}`,
-    }}>
-      <div style={{ color: pl.color, fontWeight: 600 }}>{pl.code}</div>
-      <div style={{ color: statusColor }}>{status}</div>
-      <div style={{ textAlign: "right", color: T.ink }}>{row.count.toLocaleString()}</div>
-      <div style={{ textAlign: "right" }}>{row.creators.toLocaleString()}</div>
-      <div style={{ textAlign: "right", color: T.inkFaint }}>
-        {row.count >= row.min ? "—" : `${(row.min - row.count).toLocaleString()} to go`}
-      </div>
-    </div>
-  );
-}
+const tableHeaderStyle: React.CSSProperties = {
+  display: "grid", gridTemplateColumns: "110px 70px 80px 70px 90px 1fr 120px",
+  padding: "8px 12px", background: T.bgRow,
+  fontFamily: "IBM Plex Mono, monospace", fontSize: 9, letterSpacing: 1.2,
+  textTransform: "uppercase", color: T.inkFaint,
+  borderBottom: `1px solid ${T.line}`,
+  alignItems: "center",
+};
 
 function fmtCompact(n: number): string {
   if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
   return String(n);
+}
+
+function fmtAgo(iso: string | null): string {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  if (isNaN(then)) return "—";
+  const diff = Date.now() - then;
+  const sec = Math.max(0, Math.floor(diff / 1000));
+  if (sec < 60)        return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60)        return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24)         return `${hr}h ago`;
+  const d = Math.floor(hr / 24);
+  if (d < 30)          return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12)         return `${mo}mo ago`;
+  return `${Math.floor(mo / 12)}y ago`;
 }
