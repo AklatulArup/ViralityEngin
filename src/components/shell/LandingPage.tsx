@@ -44,13 +44,20 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    fetch("/api/reference-store")
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        const arr: ReferenceEntry[] = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
-        setEntries(arr);
-      })
-      .catch(() => {});
+    const refresh = () => {
+      fetch("/api/reference-store")
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          const arr: ReferenceEntry[] = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
+          setEntries(arr);
+        })
+        .catch(() => {});
+    };
+    refresh();
+    // Refetch live when legacy Dashboard's analyze pipeline writes to the
+    // reference store or keyword bank.
+    window.addEventListener("ve:pool-updated", refresh);
+    return () => window.removeEventListener("ve:pool-updated", refresh);
   }, []);
 
   const pool = useMemo(() => {

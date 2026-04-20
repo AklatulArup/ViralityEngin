@@ -76,42 +76,43 @@ export default function NewDashboard() {
     return () => window.removeEventListener("ve:open-war-room", handler);
   }, []);
 
-  // Fetch pool stats once for the sidebar pool-stat tiles.
+  // Fetch pool stats for the sidebar tiles. Refetches on mount AND whenever
+  // legacy Dashboard fires `ve:pool-updated` after a successful analyze →
+  // reference-store/keyword-bank write. This keeps the sidebar numbers live
+  // without polling.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    fetch("/api/reference-store")
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        const entries = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
-        const creators = new Set<string>();
-        let shorts = 0;
-        for (const e of entries) {
-          const handle = (e?.channelName ?? e?.name) as string | undefined;
-          if (handle) creators.add(handle);
-          // ReferenceEntry stores durationSeconds + videoFormat at top level
-          // (see src/lib/types.ts). Platform `youtube_short` is also a short.
-          // Previously we read `e.metrics?.durationSeconds` which is always
-          // undefined — that's why the sidebar tile read 0.
-          const duration   = Number(e?.durationSeconds ?? 0);
-          const format     = e?.videoFormat as string | undefined;
-          const platformId = e?.platform    as string | undefined;
-          if (platformId === "youtube_short" || format === "short" || (duration > 0 && duration <= 60)) shorts++;
-        }
-        // Keywords — keyword-bank API returns `{ categories: { niche[],
-        // competitors[], contentType[], language[] } }`, NOT a flat
-        // `keywords[]` array. Sum category lengths for the total bank size.
-        fetch("/api/keyword-bank")
-          .then(r => r.ok ? r.json() : null)
-          .then(kb => {
-            const cats = kb?.categories ?? {};
-            const keywords = Object.values(cats).reduce<number>((n, arr) => {
-              return n + (Array.isArray(arr) ? arr.length : 0);
-            }, 0);
-            setPoolStats({ videos: entries.length, creators: creators.size, shorts, keywords });
-          })
-          .catch(() => setPoolStats({ videos: entries.length, creators: creators.size, shorts, keywords: 0 }));
-      })
-      .catch(() => {});
+    const refresh = () => {
+      fetch("/api/reference-store")
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          const entries = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
+          const creators = new Set<string>();
+          let shorts = 0;
+          for (const e of entries) {
+            const handle = (e?.channelName ?? e?.name) as string | undefined;
+            if (handle) creators.add(handle);
+            const duration   = Number(e?.durationSeconds ?? 0);
+            const format     = e?.videoFormat as string | undefined;
+            const platformId = e?.platform    as string | undefined;
+            if (platformId === "youtube_short" || format === "short" || (duration > 0 && duration <= 60)) shorts++;
+          }
+          fetch("/api/keyword-bank")
+            .then(r => r.ok ? r.json() : null)
+            .then(kb => {
+              const cats = kb?.categories ?? {};
+              const keywords = Object.values(cats).reduce<number>((n, arr) => {
+                return n + (Array.isArray(arr) ? arr.length : 0);
+              }, 0);
+              setPoolStats({ videos: entries.length, creators: creators.size, shorts, keywords });
+            })
+            .catch(() => setPoolStats({ videos: entries.length, creators: creators.size, shorts, keywords: 0 }));
+        })
+        .catch(() => {});
+    };
+    refresh();
+    window.addEventListener("ve:pool-updated", refresh);
+    return () => window.removeEventListener("ve:pool-updated", refresh);
   }, []);
 
   const handleAnalyze = (url: string) => {

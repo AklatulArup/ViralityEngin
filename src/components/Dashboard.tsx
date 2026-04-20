@@ -125,6 +125,18 @@ function enrichVideo(
   };
 }
 
+// Wrapper around fetch for any POST that grows the reference pool or
+// keyword bank. Fires a window-level `ve:pool-updated` event on success so
+// the new shell's sidebar + landing page can refetch their counts live.
+function poolWrite(url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, init).then(r => {
+    if (r.ok && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("ve:pool-updated"));
+    }
+    return r;
+  });
+}
+
 export default function Dashboard({ headless = false }: DashboardProps = {}) {
   const [activeModes, setActiveModes] = useState<ModeId[]>(["F", "G", "C"]);
   const [inputTab, setInputTab] = useState<InputTab>("youtube");
@@ -244,7 +256,7 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
     if (newKeywords.length > 0) {
       setKeywordBank(updated);
       // Persist to server
-      fetch("/api/keyword-bank", {
+      poolWrite("/api/keyword-bank", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ niche: newKeywords }),
@@ -350,7 +362,7 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
       const entries = buildReferenceEntry(batchResult);
       const entryArray = Array.isArray(entries) ? entries : [entries];
       if (entryArray.length > 0) {
-        fetch("/api/reference-store", {
+        poolWrite("/api/reference-store", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(entryArray),
@@ -494,7 +506,7 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
         const entryOrEntries = buildReferenceEntry(channelResult);
         const entriesArray = Array.isArray(entryOrEntries) ? entryOrEntries : [entryOrEntries];
         if (entriesArray.length > 0) {
-          fetch("/api/reference-store", {
+          poolWrite("/api/reference-store", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(entriesArray),
@@ -718,7 +730,7 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
         ];
 
         if (allEntries.length > 0) {
-          fetch("/api/reference-store", {
+          poolWrite("/api/reference-store", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(allEntries),
@@ -802,7 +814,7 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
           const entries = buildReferenceEntry(batchResult);
           const entryArray = Array.isArray(entries) ? entries : [entries];
           if (entryArray.length > 0) {
-            fetch("/api/reference-store", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entryArray) })
+            poolWrite("/api/reference-store", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entryArray) })
               .then(() => { setRefStoreStatus("saved"); refreshReferenceStore(); }).catch(() => {});
           }
         }
@@ -876,7 +888,7 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
         // Save all Instagram posts to the reference pool — aggressive growth
         const igEntries: ReferenceEntry[] = enrichedIG.map((v) => buildEntryFromVideo(v, "instagram"));
         if (igEntries.length > 0) {
-          fetch("/api/reference-store", {
+          poolWrite("/api/reference-store", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(igEntries),
@@ -914,7 +926,7 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
           return buildEntryFromVideo(enriched, "x");
         });
         if (xEntries.length > 0) {
-          fetch("/api/reference-store", {
+          poolWrite("/api/reference-store", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(xEntries),
@@ -1544,15 +1556,9 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
         )}
         {/* end headless-hidden top bar */}
 
-        {/* ── Headless-mode URL input — when embedded, surface a compact
-            URL input inside main so the user can still analyze from here
-            in case they didn't use the new shell's TopBar. The analyze()
-            call below is the same pipeline. ── */}
-        {headless && (
-          <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <UrlInput onAnalyze={analyze} loading={loading} status={status} error={error} />
-          </div>
-        )}
+        {/* Headless mode: no inline URL input — the new shell's TopBar
+            handles analyze via a sessionStorage handoff. Kept a second URL
+            bar out of the UI to avoid duplication. */}
 
         {/* ── Instagram accuracy notice — full-width, below topbar ── */}
         {inputTab === "instagram" && (
