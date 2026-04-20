@@ -239,7 +239,7 @@ function ModeTooltip({ hovered }: { hovered: { id: string; rect: DOMRect } }) {
       <div style={{
         background: T.bgPanel,
         border: `1px solid ${T.lineMid}`,
-        borderRadius: 6, padding: "10px 12px",
+        borderRadius: 4, padding: "10px 12px",
         boxShadow: `0 8px 40px rgba(0,0,0,0.7), 0 0 20px ${mode.color}18`,
       }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>

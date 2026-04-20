@@ -25,7 +25,7 @@
 
 import React, { useEffect, useState } from "react";
 import type { Platform } from "@/lib/forecast";
-import { type ShellRoute, PLATFORMS } from "@/lib/design-tokens";
+import { type ShellRoute, PLATFORMS, T } from "@/lib/design-tokens";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import HistoryDrawer from "./HistoryDrawer";
@@ -145,7 +145,7 @@ export default function NewDashboard() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", width: "100vw", background: "#0B0C0E", color: "#E8E6E1", fontFamily: "IBM Plex Sans, sans-serif" }}>
+    <div style={{ display: "flex", height: "100vh", width: "100vw", background: T.bg, color: T.ink, fontFamily: "IBM Plex Sans, sans-serif" }}>
       <Sidebar
         route={route}         setRoute={setRoute}
         platform={platform}   setPlatform={setPlatform}
@@ -190,17 +190,17 @@ function CalibrationStub() {
   return (
     <div style={{ padding: "16px 20px", position: "relative" }}>
       <section style={{
-        background: "#101216", border: "1px solid rgba(255,255,255,0.06)",
+        background: T.bgPanel, border: `1px solid ${T.line}`,
         borderRadius: 4, padding: "16px 18px",
       }}>
-        <div style={{ fontSize: 14, color: "#E8E6E1", fontWeight: 600, marginBottom: 6 }}>Forecast calibration</div>
-        <div style={{ fontSize: 12, color: "#B5B2AB", marginBottom: 12, lineHeight: 1.55 }}>
+        <div style={{ fontSize: 14, color: T.ink, fontWeight: 600, marginBottom: 6 }}>Forecast calibration</div>
+        <div style={{ fontSize: 12, color: T.inkDim, marginBottom: 12, lineHeight: 1.55 }}>
           The full calibration surface (MdAPE per platform, conformal intervals, lifecycle-tier distribution, auto-tuning suggestions) is at the admin page below. Opening this route only restores the persisted position in the new shell.
         </div>
         <a href="/admin/calibration" style={{
           display: "inline-block", padding: "8px 14px",
-          background: "rgba(155,135,232,0.14)", border: "1px solid rgba(155,135,232,0.35)",
-          color: "#9B87E8", fontFamily: "IBM Plex Mono, monospace", fontSize: 11,
+          background: T.purpleDim, border: `1px solid ${T.purple}55`,
+          color: T.purple, fontFamily: "IBM Plex Mono, monospace", fontSize: 11,
           letterSpacing: 0.8, borderRadius: 3, textDecoration: "none",
         }}>→ /admin/calibration</a>
       </section>
