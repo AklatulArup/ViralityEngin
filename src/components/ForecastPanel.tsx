@@ -434,11 +434,18 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video.id, JSON.stringify(manualInputs)]);
 
-  // Target date for custom projection — defaults to 30 days from publish (or from today if pre-publish)
+  // Target date for custom projection — defaults to TODAY (the date the RM
+  // is analyzing). If the video isn't published yet, anchor to publish day
+  // instead. Previously defaulted to publish+30d, which surprised users —
+  // they expected the picker to start "where I am now", not "one month into
+  // the future".
   const defaultTargetDate = useMemo(() => {
-    const anchor = video.publishedAt ? new Date(video.publishedAt) : new Date();
-    const target = new Date(anchor.getTime() + 30 * 86_400_000);
-    return target.toISOString().split("T")[0];  // YYYY-MM-DD
+    // eslint-disable-next-line react-hooks/purity
+    const now = new Date();
+    const publishMs = video.publishedAt ? new Date(video.publishedAt).getTime() : now.getTime();
+    // Don't pick a date before the publish date (projectAtDate rejects those).
+    const anchor = new Date(Math.max(now.getTime(), publishMs));
+    return anchor.toISOString().split("T")[0];  // YYYY-MM-DD
   }, [video.publishedAt]);
 
   const [targetDate, setTargetDate] = useState<string>(defaultTargetDate);
