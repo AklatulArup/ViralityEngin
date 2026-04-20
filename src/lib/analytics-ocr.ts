@@ -17,6 +17,7 @@
 // non-negotiable rule: "We NEVER invent numbers".
 
 import type { ManualInputs } from "./forecast";
+import { fetchGemini } from "./gemini-keys";
 
 export interface OcrField {
   value:      number;
@@ -41,37 +42,35 @@ export async function extractAnalyticsFromImage(
   imageBase64: string,
   mimeType:    string,
 ): Promise<{ ok: true; extraction: OcrExtraction } | { ok: false; reason: string; detail?: string }> {
-  const geminiKey = process.env.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY_2;
-  if (!geminiKey) return { ok: false, reason: "gemini_not_configured" };
-
   const prompt = buildOcrPrompt();
 
-  let gemRes: Response;
-  try {
-    gemRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-      {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            role:  "user",
-            parts: [
-              { text: prompt },
-              { inlineData: { mimeType, data: imageBase64 } },
-            ],
-          }],
-          generationConfig: {
-            temperature:        0.0,
-            maxOutputTokens:    1024,
-            responseMimeType:   "application/json",
-          },
-        }),
+  // Multi-key rotation via fetchGemini — benefits from every configured
+  // GEMINI_API_KEY* env var, with automatic fallthrough on 429/403.
+  const gem = await fetchGemini({
+    model: "gemini-2.0-flash",   // vision — full Flash
+    bodyJson: {
+      contents: [{
+        role:  "user",
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: imageBase64 } },
+        ],
+      }],
+      generationConfig: {
+        temperature:        0.0,
+        maxOutputTokens:    1024,
+        responseMimeType:   "application/json",
       },
-    );
-  } catch (e) {
-    return { ok: false, reason: "network_error", detail: e instanceof Error ? e.message : String(e) };
+    },
+  });
+  if (!gem.ok || !gem.response) {
+    return {
+      ok: false,
+      reason: gem.reason === "no_keys" ? "gemini_not_configured" : "gemini_error",
+      detail: gem.lastError ?? `attempts: ${gem.attempts ?? 0}`,
+    };
   }
+  const gemRes = gem.response;
 
   if (!gemRes.ok) {
     const errText = await gemRes.text().catch(() => "unknown");

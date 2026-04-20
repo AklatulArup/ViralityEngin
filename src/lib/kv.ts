@@ -49,11 +49,17 @@ export function isKvAvailable(): boolean {
   return getClient() !== null;
 }
 
-export async function kvSet<T>(key: string, value: T): Promise<boolean> {
+export async function kvSet<T>(key: string, value: T, ttlSeconds?: number): Promise<boolean> {
   const client = getClient();
   if (!client) return false;
   try {
-    await client.set(NAMESPACE + key, JSON.stringify(value));
+    if (typeof ttlSeconds === "number" && ttlSeconds > 0) {
+      // Upstash supports `ex` for seconds TTL on SET. Used for e.g. the
+      // 6-hour sentiment cache so entries don't accumulate forever.
+      await client.set(NAMESPACE + key, JSON.stringify(value), { ex: ttlSeconds });
+    } else {
+      await client.set(NAMESPACE + key, JSON.stringify(value));
+    }
     return true;
   } catch (e) {
     console.error(`[kv] set failed for ${key}:`, e);

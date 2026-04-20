@@ -41,6 +41,8 @@
 // Midpoints used for the point estimate. Confidence is "high" when Gemini
 // marks at least 10 criteria as clearly assessable, "medium" otherwise.
 
+import { fetchGemini } from "./gemini-keys";
+
 export interface ThumbnailCriterionScore {
   name:   string;
   weight: number;       // max points for this criterion (1 or 2)
@@ -64,35 +66,34 @@ export async function scoreThumbnail(
   imageBase64: string,
   mimeType:    string,
 ): Promise<{ ok: true; score: ThumbnailScore } | { ok: false; reason: string; detail?: string }> {
-  const geminiKey = process.env.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY_2;
-  if (!geminiKey) return { ok: false, reason: "gemini_not_configured" };
-
-  let gemRes: Response;
-  try {
-    gemRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-      {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            role:  "user",
-            parts: [
-              { text: buildPrompt() },
-              { inlineData: { mimeType, data: imageBase64 } },
-            ],
-          }],
-          generationConfig: {
-            temperature:      0.0,
-            maxOutputTokens:  1024,
-            responseMimeType: "application/json",
-          },
-        }),
+  // Uses the shared fetchGemini helper so multi-key rotation kicks in
+  // automatically — all configured GEMINI_API_KEY / _2 / _3 / ... are
+  // tried in round-robin, with automatic fallthrough on 429/403.
+  const gem = await fetchGemini({
+    model: "gemini-2.0-flash",   // Vision calls need full Flash, not Lite
+    bodyJson: {
+      contents: [{
+        role:  "user",
+        parts: [
+          { text: buildPrompt() },
+          { inlineData: { mimeType, data: imageBase64 } },
+        ],
+      }],
+      generationConfig: {
+        temperature:      0.0,
+        maxOutputTokens:  1024,
+        responseMimeType: "application/json",
       },
-    );
-  } catch (e) {
-    return { ok: false, reason: "network_error", detail: e instanceof Error ? e.message : String(e) };
+    },
+  });
+  if (!gem.ok || !gem.response) {
+    return {
+      ok: false,
+      reason: gem.reason === "no_keys" ? "gemini_not_configured" : "gemini_error",
+      detail: gem.lastError ?? `attempts: ${gem.attempts ?? 0}`,
+    };
   }
+  const gemRes = gem.response;
 
   if (!gemRes.ok) {
     const errText = await gemRes.text().catch(() => "unknown");

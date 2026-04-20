@@ -1,16 +1,35 @@
 // /api/forecast/sentiment
 //
-// Analyses the top comments on a video using Gemini to produce a sentiment
+// Analyses the top comments on a video using an LLM to produce a sentiment
 // score. Positive sentiment correlates with reach expansion on every platform —
 // the algorithm promotes content that generates positive engagement.
 //
-// Input: array of comment strings (caller supplies — typically 10-20)
-// Output: overall score 0-100, positive/neutral/negative counts, flags
+// Input:  array of comment strings (typically 10-20) + optional { platform, postId }
+//         for KV caching.
+// Output: overall score 0-100, positive/neutral/negative counts, flags.
+//
+// Free-tier capacity stack (all zero-cost):
+//   1. KV cache by (platform, postId) — repeat forecasts of the same post
+//      skip the LLM call entirely. 6h TTL.
+//   2. Gemini 2.0 Flash-Lite primary (2× RPM vs full Flash, same daily cap).
+//   3. Multi-key rotation (fetchGemini helper) — all configured
+//      GEMINI_API_KEY, _2, _3, _4, _5 env vars tried in round-robin, with
+//      automatic fallthrough on 429/403.
+//   4. Groq Llama 3.3 70B fallback if every Gemini key is exhausted or
+//      unavailable. Groq free tier = 14,400 req/day so effectively
+//      unlimited for RM daily volume. Requires GROQ_API_KEY env var.
 
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
+import { kvGet, kvSet, isKvAvailable } from "@/lib/kv";
+import { fetchGemini, isGeminiConfigured } from "@/lib/gemini-keys";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
+export const dynamic = "force-dynamic";
+
+const CACHE_TTL_SECONDS = 6 * 60 * 60;   // 6 hours
+const CACHE_PREFIX      = "sentiment:";
 
 export interface SentimentResult {
   score:        number;    // 0-100 (100 = overwhelmingly positive)
@@ -23,53 +42,143 @@ export interface SentimentResult {
   rationale:    string;
 }
 
+interface CachedSentiment {
+  computedAt: string;
+  result:     SentimentResult;
+  source:     "gemini" | "groq";
+}
+
+function cacheKey(platform: string, postId: string): string {
+  return `${CACHE_PREFIX}${platform}:${postId}`;
+}
+
+// Fallback cache key when caller omits (platform, postId): hash the first
+// few comments so identical comment sets still dedupe within the TTL.
+function fallbackCacheKey(comments: string[]): string {
+  const body = comments.slice(0, 5).join("|").slice(0, 400);
+  const hash = createHash("sha1").update(body).digest("hex").slice(0, 16);
+  return `${CACHE_PREFIX}fallback:${hash}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const comments: string[] = Array.isArray(body?.comments)
       ? body.comments.filter((c: unknown) => typeof c === "string" && c.length > 0).slice(0, 30)
       : [];
+    const platform = typeof body?.platform === "string" ? body.platform : "";
+    const postId   = typeof body?.postId   === "string" ? body.postId   : "";
 
     if (comments.length === 0) {
       return NextResponse.json({ ok: false, reason: "no_comments" });
     }
 
-    const geminiKey = process.env.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY_2;
-    if (!geminiKey) {
-      return NextResponse.json({ ok: false, reason: "gemini_not_configured" });
+    // ── Cache lookup ─────────────────────────────────────────────────
+    const key = (platform && postId)
+      ? cacheKey(platform, postId)
+      : fallbackCacheKey(comments);
+    if (isKvAvailable()) {
+      const cached = await kvGet<CachedSentiment>(key);
+      if (cached?.result) {
+        return NextResponse.json({
+          ok: true,
+          result: cached.result,
+          cached: true,
+          source: cached.source,
+          computedAt: cached.computedAt,
+        });
+      }
     }
 
     const prompt = buildSentimentPrompt(comments);
 
-    const gemRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+    // ── Primary: Gemini Flash-Lite with multi-key rotation ───────────
+    let parsed: Record<string, unknown> | null = null;
+    let source: "gemini" | "groq" | null = null;
+
+    if (isGeminiConfigured()) {
+      const gem = await fetchGemini({
+        model: "gemini-2.0-flash-lite",
+        bodyJson: {
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.1, maxOutputTokens: 512, responseMimeType: "application/json" },
-        }),
-      },
-    );
-
-    if (!gemRes.ok) {
-      const errText = await gemRes.text().catch(() => "unknown");
-      return NextResponse.json({ ok: false, reason: "gemini_error", detail: errText.slice(0, 200) });
+        },
+      });
+      if (gem.ok && gem.response) {
+        const gemData = await gem.response.json().catch(() => null);
+        const raw = gemData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+        parsed = safeJsonParse(raw);
+        if (parsed) source = "gemini";
+      }
     }
 
-    const gemData = await gemRes.json();
-    const raw = gemData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-    const parsed = safeJsonParse(raw);
+    // ── Fallback: Groq Llama 3.3 70B ─────────────────────────────────
     if (!parsed) {
-      return NextResponse.json({ ok: false, reason: "gemini_parse_failed" });
+      const groqParsed = await tryGroqFallback(prompt);
+      if (groqParsed) { parsed = groqParsed; source = "groq"; }
+    }
+
+    if (!parsed || !source) {
+      return NextResponse.json({
+        ok: false,
+        reason: isGeminiConfigured() ? "all_providers_failed" : "no_llm_provider_configured",
+      });
     }
 
     const result: SentimentResult = normaliseResult(parsed, comments.length);
-    return NextResponse.json({ ok: true, result });
+
+    // ── Cache the result for future identical posts ──────────────────
+    if (isKvAvailable()) {
+      const record: CachedSentiment = {
+        computedAt: new Date().toISOString(),
+        result,
+        source,
+      };
+      await kvSet(key, record, CACHE_TTL_SECONDS);
+    }
+
+    return NextResponse.json({ ok: true, result, cached: false, source });
   } catch (e) {
     console.error("[api/forecast/sentiment]", e);
     return NextResponse.json({ ok: false, error: "Internal error" }, { status: 500 });
+  }
+}
+
+// ─── GROQ FALLBACK ────────────────────────────────────────────────────────
+//
+// Groq free tier: 30 RPM, 14,400 RPD on Llama 3.3 70B. ~10× Gemini's daily
+// cap. Used only when every Gemini key is quota-exhausted or unconfigured.
+// Groq's OpenAI-compatible API accepts the same JSON-output convention.
+
+async function tryGroqFallback(prompt: string): Promise<Record<string, unknown> | null> {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) return null;
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        Authorization:   `Bearer ${groqKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.1,
+        max_tokens: 512,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "You return only valid JSON matching the schema the user describes. No prose outside the JSON." },
+          { role: "user",   content: prompt },
+        ],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== "string") return null;
+    return safeJsonParse(content);
+  } catch {
+    return null;
   }
 }
 

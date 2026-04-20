@@ -26,6 +26,8 @@
 // confidence scoring treats it as a signal not a measurement — same pattern
 // as the thumbnail-CTR predictor for YT.
 
+import { fetchGemini } from "./gemini-keys";
+
 export interface HookFormulaMatch {
   name:  "contradiction" | "delayed-reveal" | "question" | "data" | "pattern-interrupt" | "none";
   strength: 0 | 1 | 2;    // 0 = absent, 1 = weak, 2 = strong
@@ -56,36 +58,33 @@ export async function scoreHookStrength(params: {
   caption:     string;
   platform:    "tiktok" | "instagram";
 }): Promise<{ ok: true; score: HookScore } | { ok: false; reason: string; detail?: string }> {
-  const geminiKey = process.env.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY_2;
-  if (!geminiKey) return { ok: false, reason: "gemini_not_configured" };
-
-  let gemRes: Response;
-  try {
-    gemRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            role: "user",
-            parts: [
-              { text: buildPrompt(params.caption, params.platform) },
-              { inlineData: { mimeType: params.mimeType, data: params.imageBase64 } },
-            ],
-          }],
-          generationConfig: {
-            temperature:      0.0,
-            maxOutputTokens:  1024,
-            responseMimeType: "application/json",
-          },
-        }),
+  // Multi-key rotation via fetchGemini: tries all configured GEMINI_API_KEY*
+  // env vars in round-robin and falls through on 429/403 automatically.
+  const gem = await fetchGemini({
+    model: "gemini-2.0-flash",   // vision — needs full Flash
+    bodyJson: {
+      contents: [{
+        role: "user",
+        parts: [
+          { text: buildPrompt(params.caption, params.platform) },
+          { inlineData: { mimeType: params.mimeType, data: params.imageBase64 } },
+        ],
+      }],
+      generationConfig: {
+        temperature:      0.0,
+        maxOutputTokens:  1024,
+        responseMimeType: "application/json",
       },
-    );
-  } catch (e) {
-    return { ok: false, reason: "network_error", detail: e instanceof Error ? e.message : String(e) };
+    },
+  });
+  if (!gem.ok || !gem.response) {
+    return {
+      ok: false,
+      reason: gem.reason === "no_keys" ? "gemini_not_configured" : "gemini_error",
+      detail: gem.lastError ?? `attempts: ${gem.attempts ?? 0}`,
+    };
   }
-
+  const gemRes = gem.response;
   if (!gemRes.ok) {
     const errText = await gemRes.text().catch(() => "unknown");
     return { ok: false, reason: "gemini_error", detail: errText.slice(0, 200) };
