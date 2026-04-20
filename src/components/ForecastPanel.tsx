@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { forecast, projectAtDate, PLATFORM_CONFIG, type ManualInputs, type Platform, type DataSource, type DateProjection } from "@/lib/forecast";
+import { T, PLATFORMS as SHELL_PLATFORMS } from "@/lib/design-tokens";
 import type { ConformalTable } from "@/lib/conformal";
 import { INPUT_TOOLTIPS, type InputTooltip } from "@/lib/input-tooltips";
 import { recordForecast } from "@/lib/forecast-learning";
@@ -26,29 +27,32 @@ interface ForecastPanelProps {
 // Keeping these as named constants so any future variation (V2/V3/...) can
 // swap this one block.
 
+// Shell-palette aliases so ForecastPanel shares tokens with NewDashboard.
+// We keep the `tokens` name so existing references don't churn, but the
+// values now come from the centralised design-tokens module.
 const tokens = {
-  bg:         "#16181B",
-  surface:    "#1C1F23",
-  surfaceHi:  "#22262B",
-  line:       "rgba(255,255,255,0.07)",
-  lineStrong: "rgba(255,255,255,0.12)",
-  ink:        "#E7E5E0",
-  inkDim:     "#B5B2AB",
-  inkMuted:   "#7F7C76",
-  inkFaint:   "#5A5853",
-  violet:     "#9B87E8",
-  teal:       "#6AC3B4",
-  amber:      "#D9A86A",
-  coral:      "#E08A85",
-  sky:        "#7FB0D4",
+  bg:         T.bgPanel,
+  surface:    T.bgPanelHi,
+  surfaceHi:  T.bgPanelHi,
+  line:       T.line,
+  lineStrong: T.lineStrong,
+  ink:        T.ink,
+  inkDim:     T.inkDim,
+  inkMuted:   T.inkMuted,
+  inkFaint:   T.inkFaint,
+  violet:     T.purple,
+  teal:       T.green,
+  amber:      T.amber,
+  coral:      T.red,
+  sky:        T.cyan,
 };
 
 const platformTint: Record<Platform, { color: string; label: string }> = {
-  youtube:       { color: "#E08A85", label: "YouTube" },
-  youtube_short: { color: "#D999B6", label: "Shorts" },
-  tiktok:        { color: "#6AC3B4", label: "TikTok" },
-  instagram:     { color: "#C89AD1", label: "Reels" },
-  x:             { color: "#A8A8A5", label: "X" },
+  youtube:       { color: SHELL_PLATFORMS.youtube.color,       label: SHELL_PLATFORMS.youtube.short },
+  youtube_short: { color: SHELL_PLATFORMS.youtube_short.color, label: SHELL_PLATFORMS.youtube_short.short },
+  tiktok:        { color: SHELL_PLATFORMS.tiktok.color,        label: SHELL_PLATFORMS.tiktok.short },
+  instagram:     { color: SHELL_PLATFORMS.instagram.color,     label: SHELL_PLATFORMS.instagram.short },
+  x:             { color: SHELL_PLATFORMS.x.color,             label: SHELL_PLATFORMS.x.short },
 };
 
 // Pool-coverage entry fetched from /api/reference-store.
@@ -518,79 +522,109 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   return (
     <div style={panelStyle}>
 
-      {/* ── Eyebrow / header strip ──────────────────────────────────── */}
-      <header style={{ display: "flex", alignItems: "baseline", gap: 14, paddingBottom: 16, borderBottom: `1px solid ${tokens.line}`, flexWrap: "wrap" }}>
-        <div style={eyebrowStyle}>
-          Forecast · {platformTint[platform].label}
+      {/* ── V2 Hero: compact title strip + big number + signal tiles + chart ── */}
+      <section style={{ background: T.bgPanel, border: `1px solid ${T.line}`, borderRadius: 4, padding: "18px 22px" }}>
+        {/* Title strip: platform pill + video title + horizon selector */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+          <span style={{
+            padding: "3px 9px", borderRadius: 99,
+            background: SHELL_PLATFORMS[platform].bg, color: SHELL_PLATFORMS[platform].color,
+            fontFamily: "IBM Plex Mono, monospace", fontSize: 10, letterSpacing: 0.5, whiteSpace: "nowrap",
+          }}>
+            <span style={{ display: "inline-block", width: 5, height: 5, borderRadius: 99, background: SHELL_PLATFORMS[platform].color, marginRight: 6, verticalAlign: "middle" }} />
+            {SHELL_PLATFORMS[platform].label}
+          </span>
+          <span style={{ fontSize: 13, color: T.inkDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 480 }}>
+            {video.title ?? ""}
+          </span>
+          <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "IBM Plex Mono, monospace", display: "flex", gap: 8, alignItems: "baseline" }}>
+            <span style={{ color: T.inkFaint }}>confidence</span>
+            <span style={{ color: confColor, fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.6 }}>{conf}</span>
+            <span style={{ color: T.inkFaint }}>·</span>
+            <span style={{ color: T.inkDim }}>{result.confidence.score}<span style={{ color: T.inkFaint }}>/100</span></span>
+          </span>
         </div>
-        <div style={{ fontSize: 10.5, color: tokens.inkFaint, fontFamily: "IBM Plex Mono, monospace", letterSpacing: 0.6 }}>
-          {result.trajectory ? `post age ${result.trajectory.ageDays.toFixed(1)}d · recomputes live` : "pre-publish · recomputes live"}
-        </div>
-        <div style={{ marginLeft: "auto", fontSize: 11, fontFamily: "IBM Plex Mono, monospace", display: "flex", gap: 8, alignItems: "baseline" }}>
-          <span style={{ color: tokens.inkFaint }}>confidence</span>
-          <span style={{ color: confColor, fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.6 }}>{conf}</span>
-          <span style={{ color: tokens.inkFaint }}>·</span>
-          <span style={{ color: tokens.inkDim }}>{result.confidence.score}<span style={{ color: tokens.inkFaint }}>/100</span></span>
-        </div>
-      </header>
 
-      {/* ── Hero: expected lifetime views ────────────────────────────── */}
-      <section style={{ paddingTop: 4 }}>
-        <div style={{ ...eyebrowStyle, marginBottom: 14 }}>Expected lifetime views</div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 18, flexWrap: "wrap" }}>
-          <div style={heroNumberStyle}>{formatNumber(lifetime.median)}</div>
-          <div style={{ fontSize: 15, color: tokens.inkDim, fontWeight: 300, lineHeight: 1.4, maxWidth: 360 }}>
-            likely between{" "}
-            <span style={{ color: tokens.ink, fontFamily: "IBM Plex Mono, monospace" }}>{formatNumber(lifetime.low)}</span>
-            {" and "}
-            <span style={{ color: tokens.ink, fontFamily: "IBM Plex Mono, monospace" }}>{formatNumber(lifetime.high)}</span>
+        {/* Main grid: hero number | signal tiles */}
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 20, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9, letterSpacing: 1.4, textTransform: "uppercase", color: T.inkFaint, marginBottom: 6 }}>
+              Expected lifetime views
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 58, fontWeight: 300, letterSpacing: -2, lineHeight: 1, color: T.ink }}>
+                {formatNumber(lifetime.median)}
+              </div>
+              <div style={{ display: "flex", gap: 18 }}>
+                <FStat label="low"  v={formatNumber(lifetime.low)}  />
+                <FStat label="high" v={formatNumber(lifetime.high)} />
+                <FStat label="now"  v={formatNumber(video.views)}   color={SHELL_PLATFORMS[platform].color} />
+              </div>
+            </div>
+            {narrative && (
+              <div style={{ marginTop: 14, fontSize: 12.5, lineHeight: 1.6, color: T.inkMuted, maxWidth: 560 }}>
+                {narrative}
+              </div>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, alignContent: "start" }}>
+            {signals.slice(0, 6).map((s, i) => (
+              <div
+                key={i}
+                style={{ padding: "7px 10px", background: T.bgPanelHi, border: `1px solid ${T.line}`, borderRadius: 3 }}
+              >
+                <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 8.5, letterSpacing: 1, textTransform: "uppercase", color: T.inkFaint }}>
+                  {s.k}
+                </div>
+                <div style={{
+                  fontFamily: "IBM Plex Mono, monospace", fontSize: 12, marginTop: 2,
+                  color: s.tone === "pos" ? T.green : s.tone === "neg" ? T.red : T.ink,
+                }}>
+                  {s.v}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-        <div style={{ marginTop: 20, fontSize: 14, lineHeight: 1.65, color: tokens.inkDim, maxWidth: 680, fontWeight: 300 }}>
-          {narrative}
-        </div>
-      </section>
 
-      {/* ── Ribbon chart — cumulative share curve with now marker ───── */}
-      <section>
-        <RibbonChart
+        {/* Chart-hero — wide SVG with axis grid + band + median + now marker */}
+        <HeroChart
           platform={platform}
           currentViews={video.views}
           ageHours={result.trajectory ? result.trajectory.ageDays * 24 : 0}
           lifetimeMedian={lifetime.median}
           lifetimeLow={lifetime.low}
           lifetimeHigh={lifetime.high}
-          tint={platformTint[platform].color}
+          tint={SHELL_PLATFORMS[platform].color}
         />
-        <div style={{ display: "flex", gap: 24, marginTop: 10, fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: tokens.inkFaint, flexWrap: "wrap" }}>
-          <span>now — {formatNumber(video.views)} views{result.trajectory ? `, age ${result.trajectory.ageDays.toFixed(1)}d` : ", pre-publish"}</span>
-          <span style={{ marginLeft: "auto" }}>horizon — {horizon}d</span>
+
+        {/* Tier strip — colored left bar */}
+        <div style={{
+          marginTop: 14, padding: "11px 14px", borderRadius: 4,
+          background: T.bgPanelHi, border: `1px solid ${T.line}`,
+          display: "flex", alignItems: "center", gap: 12,
+        }}>
+          <span style={{ width: 5, height: 34, borderRadius: 2, background: tierInfo.color }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: T.ink }}>{tierInfo.label}</span>
+              <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: T.inkFaint }}>
+                {tierInfo.sublabel}
+              </span>
+            </div>
+            <div style={{ fontSize: 11.5, color: T.inkMuted, marginTop: 2, lineHeight: 1.55 }}>
+              {tierInfo.rationale}
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* ── 3-column footer: stage | pool | signals ─────────────────── */}
-      <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 40, borderTop: `1px solid ${tokens.line}`, paddingTop: 26 }}>
-        <Column title="Distribution stage">
-          <div style={{ fontSize: 22, fontWeight: 400, color: tierInfo.color, marginBottom: 4 }}>{tierInfo.label}</div>
-          <div style={{ fontSize: 12, color: tokens.inkFaint, marginBottom: 12, fontFamily: "IBM Plex Mono, monospace" }}>{tierInfo.sublabel}</div>
-          <div style={{ fontSize: 13, lineHeight: 1.55, color: tokens.inkDim }}>{tierInfo.rationale}</div>
-        </Column>
-        <Column title="Reference pool">
-          <PoolCoverageColumn pool={poolCoverage} />
-        </Column>
-        <Column title="How we got here">
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {signals.map((s, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                <span style={{ color: tokens.inkDim }}>{s.k}</span>
-                <span style={{
-                  fontFamily: "IBM Plex Mono, monospace",
-                  color: s.tone === "pos" ? tokens.teal : s.tone === "neg" ? tokens.coral : tokens.ink,
-                }}>{s.v}</span>
-              </div>
-            ))}
-          </div>
-        </Column>
+      {/* Reference pool (kept below hero, reformatted for the new shell) */}
+      <section style={{ background: T.bgPanel, border: `1px solid ${T.line}`, borderRadius: 4, padding: "14px 18px" }}>
+        <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9, letterSpacing: 1.4, textTransform: "uppercase", color: T.inkFaint, marginBottom: 10 }}>
+          Reference pool
+        </div>
+        <PoolCoverageColumn pool={poolCoverage} />
       </section>
 
       {/* ── Custom date projection ──────────────────────────────────── */}
@@ -1138,6 +1172,80 @@ interface RibbonChartProps {
   tint:           string;
 }
 
+// ─── V2 HERO CHART ──────────────────────────────────────────────────────
+// Chart-hero chart from page-forecast.jsx. Wider than V1's ribbon, adds axis
+// grid lines, and emphasises the "now" marker with a ring.
+
+function FStat({ label, v, color }: { label: string; v: string; color?: string }) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: "IBM Plex Mono, monospace", fontSize: 8.5, letterSpacing: 1.2,
+        textTransform: "uppercase", color: T.inkFaint,
+      }}>{label}</div>
+      <div style={{
+        fontFamily: "IBM Plex Mono, monospace", fontSize: 17,
+        color: color || T.inkDim, marginTop: 2,
+      }}>{v}</div>
+    </div>
+  );
+}
+
+interface HeroChartProps {
+  platform:       Platform;
+  currentViews:   number;
+  ageHours:       number;
+  lifetimeMedian: number;
+  lifetimeLow:    number;
+  lifetimeHigh:   number;
+  tint:           string;
+}
+
+function HeroChart({ platform, currentViews, ageHours, lifetimeMedian, lifetimeLow, lifetimeHigh, tint }: HeroChartProps) {
+  const cfg = PLATFORM_CONFIG[platform];
+  const horizonHours = cfg.horizonDays * 24;
+  const W = 1020, H = 180, pad = { l: 44, r: 16, t: 10, b: 22 };
+
+  const steps = 80;
+  const samples: Array<{ h: number; share: number }> = [];
+  for (let i = 0; i <= steps; i++) {
+    const h = (horizonHours * i) / steps;
+    samples.push({ h, share: cfg.cumulativeShare(h / 24) });
+  }
+
+  const maxViews = Math.max(lifetimeHigh, currentViews, 1);
+  const x = (h: number) => pad.l + (h / horizonHours) * (W - pad.l - pad.r);
+  const y = (v: number) => pad.t + (1 - v / maxViews) * (H - pad.t - pad.b);
+
+  const median = samples.map(p => `${x(p.h).toFixed(1)},${y(p.share * lifetimeMedian).toFixed(1)}`).join(" L ");
+  const lo     = samples.map(p => `${x(p.h).toFixed(1)},${y(p.share * lifetimeLow).toFixed(1)}`).join(" L ");
+  const hi     = samples.map(p => `${x(p.h).toFixed(1)},${y(p.share * lifetimeHigh).toFixed(1)}`).join(" L ");
+  const band   = `M ${hi} L ${samples.slice().reverse().map(p => `${x(p.h).toFixed(1)},${y(p.share * lifetimeLow).toFixed(1)}`).join(" L ")} Z`;
+
+  const nowX     = x(Math.min(ageHours, horizonHours));
+  const nowShare = cfg.cumulativeShare(Math.min(ageHours, horizonHours) / 24);
+  const nowY     = y(nowShare * lifetimeMedian);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 180, display: "block" }}>
+      {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
+        <line key={i} x1={pad.l} x2={W - pad.r} y1={y(f * maxViews)} y2={y(f * maxViews)} stroke={T.line} />
+      ))}
+      <path d={band}          fill={tint} opacity="0.16" />
+      <path d={`M ${median}`} fill="none" stroke={tint} strokeWidth="1.6" />
+      {/* Explicit low-band line kept for transparency */}
+      <path d={`M ${lo}`}     fill="none" stroke={tint} strokeWidth="0.8" opacity="0.4" strokeDasharray="3 3" />
+      {ageHours > 0 && (
+        <>
+          <line x1={nowX} x2={nowX} y1={pad.t} y2={H - pad.b} stroke={T.lineStrong} strokeDasharray="3 4" />
+          <circle cx={nowX} cy={nowY} r="4" fill={T.bg} stroke={tint} strokeWidth="2" />
+          <text x={nowX + 4} y={pad.t + 10} fill={T.inkMuted} fontFamily="IBM Plex Mono, monospace" fontSize="10">now</text>
+        </>
+      )}
+    </svg>
+  );
+}
+
 function RibbonChart({ platform, currentViews, ageHours, lifetimeMedian, lifetimeLow, lifetimeHigh, tint }: RibbonChartProps) {
   const cfg = PLATFORM_CONFIG[platform];
   const horizonHours = cfg.horizonDays * 24;
@@ -1372,15 +1480,6 @@ const panelStyle: React.CSSProperties = {
   display: "flex", flexDirection: "column", gap: 28,
   color: tokens.ink,
   fontFamily: "IBM Plex Sans, sans-serif",
-};
-
-const heroNumberStyle: React.CSSProperties = {
-  fontFamily: "IBM Plex Sans, sans-serif",
-  fontWeight: 300,
-  fontSize: 96,
-  lineHeight: 0.95,
-  letterSpacing: "-0.03em",
-  color: tokens.ink,
 };
 
 const boxStyle: React.CSSProperties = {
