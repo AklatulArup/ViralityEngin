@@ -16,6 +16,8 @@ import { scoreHookStrength, type HookScore } from "@/lib/hook-strength-predictor
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
+// Reads url/caption/platform from query + KV cache lookup — must be dynamic.
+export const dynamic = "force-dynamic";
 
 const MAX_BYTES     = 6 * 1024 * 1024;
 const CACHE_PREFIX  = "hook-strength:";

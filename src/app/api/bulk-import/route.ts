@@ -4,9 +4,10 @@ import { join } from "path";
 import { parseInput } from "@/lib/url-parser";
 import { fetchVideo, fetchChannel, fetchByHandle, fetchFullDiscography } from "@/lib/youtube";
 import { buildEntryFromVideo } from "@/lib/reference-store";
-import { runVRS, runTRS } from "@/lib/vrs";
+import { runPlatformVRS } from "@/lib/vrs";
 import { expandKeywordBank } from "@/lib/keyword-bank";
 import { daysAgo, velocity } from "@/lib/formatters";
+import type { Platform } from "@/lib/forecast";
 import type { ReferenceEntry, ReferenceStore, Blocklist, VideoData, ChannelData, KeywordBank } from "@/lib/types";
 
 const PATHS = {
@@ -32,12 +33,16 @@ interface HistoryEntry {
   previousSnapshot?: { checkedAt: string; metrics: Record<string, number | string> };
 }
 
-// Enrich a VideoData with VRS, velocity, and other computed metrics
-function enrichEntry(v: VideoData, platform: "youtube" | "tiktok" = "youtube"): ReferenceEntry {
+// Enrich a VideoData with VRS, velocity, and other computed metrics.
+// Uses runPlatformVRS so IG → IG_CRITERIA, YTS → YT_SHORTS_CRITERIA,
+// X → X_CRITERIA, TT → TT_CRITERIA, YT → YT_LONGFORM_CRITERIA. Previously
+// this forced everything except "tiktok" through YT criteria.
+function enrichEntry(v: VideoData, platform: Platform = "youtube"): ReferenceEntry {
   const entry = buildEntryFromVideo(v, platform);
   const days   = daysAgo(v.publishedAt);
   const vel    = velocity(v.views, days);
-  const vrs    = platform === "tiktok" ? runTRS(v) : runVRS(v);
+  const videoWithPlatform: VideoData = v.platform ? v : { ...v, platform };
+  const vrs    = runPlatformVRS(videoWithPlatform);
   const eng    = v.views > 0 ? ((v.likes + v.comments) / v.views) * 100 : 0;
 
   return {
@@ -144,7 +149,7 @@ export async function POST(request: NextRequest) {
   let totalHistorySaved  = 0;
 
   // Helper: process a batch of videos, extract keywords, save history
-  function processBatch(videos: VideoData[], platform: "youtube" | "tiktok"): {
+  function processBatch(videos: VideoData[], platform: Platform): {
     entries: ReferenceEntry[]; kwAdded: number; htAdded: number; histAdded: number; avgVRS: number;
   } {
     const entries: ReferenceEntry[] = [];
@@ -156,7 +161,8 @@ export async function POST(request: NextRequest) {
         const days = daysAgo(v.publishedAt);
         const vel  = velocity(v.views, days);
         const eng  = v.views > 0 ? ((v.likes + v.comments) / v.views) * 100 : 0;
-        const vrs  = platform === "tiktok" ? runTRS(v) : runVRS(v);
+        const withPlatform: VideoData = v.platform ? v : { ...v, platform };
+        const vrs  = runPlatformVRS(withPlatform);
         saveHistory(histStore, v, platform, vrs.estimatedFullScore, vel, eng);
         histAdded++;
         continue;

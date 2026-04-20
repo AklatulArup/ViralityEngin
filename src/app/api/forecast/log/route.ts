@@ -12,6 +12,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { kvGet, kvSet, kvListPush, kvListRange, isKvAvailable, kvDelete } from "@/lib/kv";
 
 export const runtime = "nodejs";
+// DELETE reads `id` from query + all methods touch KV — must be dynamic.
+export const dynamic = "force-dynamic";
 
 export interface ForecastLogEntry {
   id:             string;   // unique — timestamp + random

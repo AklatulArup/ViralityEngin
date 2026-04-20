@@ -6,7 +6,7 @@
 import { NextRequest } from "next/server";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { runVRS, runTRS } from "@/lib/vrs";
+import { runPlatformVRS } from "@/lib/vrs";
 import { expandKeywordBank } from "@/lib/keyword-bank";
 import { detectArchetypes } from "@/lib/archetypes";
 import type { ReferenceStore, ReferenceEntry, KeywordBank, VideoData } from "@/lib/types";
@@ -189,7 +189,10 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const storePlatform: "youtube" | "tiktok" = (platform === "tiktok" || platform === "instagram") ? "tiktok" : "youtube";
+    // Previously this coerced all short-form (IG + TT) into "tiktok" for
+    // storage, which polluted the reference pool: IG entries were stored
+    // with platform="tiktok", making pool-stats bucket them wrong. Keep the
+    // real detected platform so the pool, scoring, and filters agree.
     const id = url ? extractId(url, platform) : `csv_${i}_${Date.now()}`;
 
     if (existingIds.has(id)) {
@@ -216,9 +219,10 @@ export async function POST(req: NextRequest) {
       duration: row.duration ?? "0:00", durationSeconds: durSecs,
       thumbnail: "", description: row.description ?? "",
       tags, shares, saves,
+      platform,
     };
 
-    const vrs = storePlatform === "tiktok" ? runTRS(videoStub) : runVRS(videoStub);
+    const vrs = runPlatformVRS(videoStub);
     const archetypes = detectArchetypes(title, tags);
 
     // Extract keywords
@@ -233,7 +237,7 @@ export async function POST(req: NextRequest) {
     }
 
     const entry: ReferenceEntry = {
-      id, type: "video", platform: storePlatform,
+      id, type: "video", platform,
       name: title, channelId: videoStub.channelId, channelName: channel,
       analyzedAt: now,
       metrics: { views, engagement: parseFloat(eng.toFixed(2)), vrsScore: vrs.estimatedFullScore },

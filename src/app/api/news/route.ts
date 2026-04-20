@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Reads `q` / `refresh` from request URL — must be dynamic.
+export const dynamic = "force-dynamic";
+
 // News API route — fetches live trading/finance/market news
 // Uses GNews API (free tier: 100 requests/day) as primary
 // Falls back to keyword-based headline scraping from Google News RSS if no key set

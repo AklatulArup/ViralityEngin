@@ -14,6 +14,8 @@ import { scoreThumbnail, type ThumbnailScore } from "@/lib/thumbnail-ctr-predict
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
+// Reads thumbnail url from query + KV cache lookup — must be dynamic.
+export const dynamic = "force-dynamic";
 
 const MAX_BYTES = 6 * 1024 * 1024;              // don't pipe huge images into Gemini
 const CACHE_PREFIX = "thumbnail-ctr:";

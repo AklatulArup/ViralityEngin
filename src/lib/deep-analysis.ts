@@ -18,6 +18,51 @@ import { detectArchetypes, getArchetype } from "./archetypes";
 import { getPlatformRecommendations, getTikTokRecommendations } from "./algorithm-intel";
 import type { TikTokVideoStats } from "./algorithm-intel";
 import { calculateMedian } from "./baseline";
+import type { Platform } from "./forecast";
+
+// ─── Platform helpers ────────────────────────────────────────────────────
+//
+// "Short-form" = algorithm-driven feed content where TikTok-style heuristics
+// (TT_TITLE_PATTERNS, share/save rates, FYP-style insights) apply better than
+// YouTube long-form logic. IG Reels and YT Shorts both qualify.
+const SHORT_FORM_PLATFORMS: Platform[] = ["tiktok", "instagram", "youtube_short"];
+const isShortForm = (p: Platform): boolean => SHORT_FORM_PLATFORMS.includes(p);
+
+// Platform-specific messaging for recommendation + insight strings. Replaces
+// the old "TikTok's FYP algorithm" / "YouTube's algorithm" binary that left
+// IG, YTS, and X sounding robotic.
+function platformAlgorithmName(p: Platform): string {
+  switch (p) {
+    case "tiktok":        return "TikTok's FYP algorithm";
+    case "instagram":     return "Instagram's feed algorithm";
+    case "youtube_short": return "YouTube Shorts' algorithm";
+    case "x":             return "X's For You algorithm";
+    case "youtube":
+    default:              return "YouTube's algorithm";
+  }
+}
+
+function platformInitialPushLabel(p: Platform): string {
+  switch (p) {
+    case "tiktok":        return "FYP";
+    case "instagram":     return "Reels feed";
+    case "youtube_short": return "Shorts feed";
+    case "x":             return "For You";
+    case "youtube":
+    default:              return "algorithmic";
+  }
+}
+
+function platformMidPhaseTraffic(p: Platform): string {
+  switch (p) {
+    case "tiktok":        return "Residual FYP";
+    case "instagram":     return "Residual Reels feed";
+    case "youtube_short": return "Residual Shorts feed";
+    case "x":             return "Residual For You";
+    case "youtube":
+    default:              return "Search & suggested";
+  }
+}
 
 // ─── Monthly Trajectory ───
 
@@ -130,8 +175,9 @@ const TT_TITLE_PATTERNS: { pattern: string; regex: RegExp }[] = [
   { pattern: "Relatable / Humor", regex: /\b(when you|me when|that moment when|nobody:|literally)\b/i },
 ];
 
-function analyzeTitlePatterns(videos: EnrichedVideo[], platform: "youtube" | "tiktok" = "youtube"): TitlePattern[] {
-  const patterns = platform === "tiktok" ? TT_TITLE_PATTERNS : YT_TITLE_PATTERNS;
+function analyzeTitlePatterns(videos: EnrichedVideo[], platform: Platform = "youtube"): TitlePattern[] {
+  // Short-form platforms (TT / IG / YTS) share viral title DNA — use TT patterns.
+  const patterns = isShortForm(platform) ? TT_TITLE_PATTERNS : YT_TITLE_PATTERNS;
   const results: TitlePattern[] = [];
 
   for (const { pattern, regex } of patterns) {
@@ -164,7 +210,7 @@ function analyzeTitlePatterns(videos: EnrichedVideo[], platform: "youtube" | "ti
 function generateOutlierInsights(
   videos: EnrichedVideo[],
   medianViews: number,
-  platform: "youtube" | "tiktok" = "youtube"
+  platform: Platform = "youtube"
 ): OutlierInsight[] {
   const outliers = videos.filter((v) => v.isOutlier);
   if (outliers.length === 0) return [];
@@ -226,26 +272,32 @@ function generateOutlierInsights(
         );
       }
 
-      // TikTok-specific: share-driven virality
-      if (platform === "tiktok") {
+      // Short-form share/save virality (applies to TT, IG, YTS — all use the
+      // same intent-signal model: shares + saves outweigh likes as distribution
+      // triggers). Messaging adapts per platform.
+      if (isShortForm(platform)) {
         const shares = (v as unknown as { shares?: number }).shares ?? 0;
         const shareRate = v.views > 0 ? (shares / v.views) * 100 : 0;
         if (shareRate >= 1) {
+          const weight =
+            platform === "tiktok"        ? "27x" :
+            platform === "instagram"     ? "strong"  :
+            platform === "youtube_short" ? "strong"  : "strong";
           reasons.push(
-            `Share rate is ${shareRate.toFixed(2)}% — well above 1% threshold. On TikTok, shares are 27x more powerful than likes for FYP distribution. This video was actively shared.`
+            `Share rate is ${shareRate.toFixed(2)}% — well above 1% threshold. On ${platformAlgorithmName(platform).replace(/ algorithm.*$/, "")}, shares are a ${weight} signal for feed distribution. This video was actively shared.`
           );
         }
         const saves = (v as unknown as { saves?: number }).saves ?? 0;
         const saveRate = v.views > 0 ? (saves / v.views) * 100 : 0;
         if (saveRate >= 0.5) {
           reasons.push(
-            `Save rate is ${saveRate.toFixed(2)}% — signals high rewatch/reference value. Saves boost FYP distribution as a strong intent signal.`
+            `Save rate is ${saveRate.toFixed(2)}% — signals high rewatch / reference value. Saves boost distribution on ${platformAlgorithmName(platform).replace(/ algorithm.*$/, "")} as a strong intent signal.`
           );
         }
       }
 
-      // Title pattern reasoning
-      const titlePatternSet = platform === "tiktok" ? TT_TITLE_PATTERNS : YT_TITLE_PATTERNS;
+      // Title pattern reasoning — short-form platforms share TT patterns.
+      const titlePatternSet = isShortForm(platform) ? TT_TITLE_PATTERNS : YT_TITLE_PATTERNS;
       for (const { pattern, regex } of titlePatternSet) {
         if (regex.test(v.title)) titlePats.push(pattern);
       }
@@ -259,7 +311,7 @@ function generateOutlierInsights(
       const commentRate = (v.comments / (v.views || 1)) * 100;
       if (commentRate > 1) {
         reasons.push(
-          `High comment density (${commentRate.toFixed(2)}% of viewers commented). Active comment sections signal satisfaction to ${platform === "tiktok" ? "TikTok's FYP algorithm" : "YouTube's Gemini algorithm"}.`
+          `High comment density (${commentRate.toFixed(2)}% of viewers commented). Active comment sections signal satisfaction to ${platformAlgorithmName(platform)}.`
         );
       }
 
@@ -347,7 +399,7 @@ function generateRecommendations(
   engagementPattern: EngagementPattern,
   monthlyTrajectory: MonthlyBucket[],
   _referenceEntries: ReferenceEntry[],
-  platform: "youtube" | "tiktok" = "youtube"
+  platform: Platform = "youtube"
 ): Recommendation[] {
   const recs: Recommendation[] = [];
 
@@ -486,8 +538,10 @@ function generateRecommendations(
   const avgEng =
     videos.reduce((s, v) => s + v.engagement, 0) / videos.length;
 
-  if (platform === "tiktok") {
-    // TikTok-specific recommendations from algorithm-intel
+  // Short-form platforms (TT / IG / YTS) all benefit from the TikTok-style
+  // recommendation set — share/save-driven, hook-first, FYP-aware. IG + YTS
+  // reuse the same engine because the growth levers are identical.
+  if (isShortForm(platform)) {
     const ttStats: TikTokVideoStats[] = videos.map((v) => ({
       shares: (v as unknown as { shares?: number }).shares ?? 0,
       saves: (v as unknown as { saves?: number }).saves ?? 0,
@@ -629,17 +683,21 @@ function predictViews(
 // ─── 6-Month View Projection ───
 
 // Platform-specific cumulative view distribution over 6 months.
-// YouTube has a long tail (search/suggested traffic), TikTok peaks fast then decays.
-const VIEW_CURVES: Record<string, number[]> = {
-  youtube: [0.55, 0.18, 0.10, 0.07, 0.05, 0.05], // long tail from search
-  tiktok: [0.75, 0.12, 0.06, 0.03, 0.02, 0.02], // FYP spike then decay
+// YouTube LF has the longest tail (search/suggested). Short-form platforms
+// spike in the first month then decay. X is nearly all first-week traffic.
+const VIEW_CURVES: Record<Platform, number[]> = {
+  youtube:       [0.55, 0.18, 0.10, 0.07, 0.05, 0.05],   // long tail from search
+  youtube_short: [0.70, 0.14, 0.08, 0.04, 0.02, 0.02],   // Shorts feed spike
+  tiktok:        [0.75, 0.12, 0.06, 0.03, 0.02, 0.02],   // FYP spike then decay
+  instagram:     [0.72, 0.13, 0.07, 0.04, 0.02, 0.02],   // Reels feed spike
+  x:             [0.92, 0.05, 0.02, 0.01, 0.00, 0.00],   // viral-day then dead
 };
 
 function computeSixMonthProjection(
   viewPrediction: ViewPrediction,
   engagementPattern: EngagementPattern,
   referenceEntries: ReferenceEntry[],
-  platform: "youtube" | "tiktok" = "youtube"
+  platform: Platform = "youtube"
 ): MonthlyProjection[] {
   const curve = VIEW_CURVES[platform] || VIEW_CURVES.youtube;
 
@@ -684,9 +742,9 @@ function computeSixMonthProjection(
       highViews: Math.round(highCumulative),
       basis:
         m === 0
-          ? `Initial ${platform === "tiktok" ? "FYP" : "algorithmic"} push`
+          ? `Initial ${platformInitialPushLabel(platform)} push`
           : m < 3
-            ? `${platform === "youtube" ? "Search & suggested" : "Residual FYP"} traffic`
+            ? `${platformMidPhaseTraffic(platform)} traffic`
             : "Long-tail organic discovery",
     });
   }
@@ -700,7 +758,7 @@ export function computeDeepAnalysis(
   videos: EnrichedVideo[],
   channel: ChannelData | null,
   referenceEntries: ReferenceEntry[],
-  platform: "youtube" | "tiktok" = "youtube"
+  platform: Platform = "youtube"
 ): DeepAnalysis {
   const monthlyTrajectory = computeMonthlyTrajectory(videos);
   const archetypePerformance = computeArchetypePerformance(videos);

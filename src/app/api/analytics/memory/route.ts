@@ -16,6 +16,8 @@ import {
 import type { Platform, ManualInputs } from "@/lib/forecast";
 
 export const runtime = "nodejs";
+// Reads searchParams + KV at request time — must never be pre-rendered.
+export const dynamic = "force-dynamic";
 
 const VALID_PLATFORMS = new Set<Platform>(["youtube", "youtube_short", "tiktok", "instagram", "x"]);
 

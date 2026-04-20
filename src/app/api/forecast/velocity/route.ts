@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { kvListRange, isKvAvailable } from "@/lib/kv";
 
 export const runtime = "nodejs";
+// Reads videoId from query + KV list at request time — must be dynamic.
+export const dynamic = "force-dynamic";
 export const revalidate = 300;
 
 export async function GET(req: NextRequest) {

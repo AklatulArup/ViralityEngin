@@ -9,6 +9,7 @@ import { recordForecast } from "@/lib/forecast-learning";
 import { computeDayOfWeekProfile, fetchMarketVolatility, combineSeasonality, type DayOfWeekProfile, type MarketVolatilityProfile } from "@/lib/seasonality";
 import { classifyCreatorNiche, nicheAdjustment } from "@/lib/niche-classifier";
 import { assessCreatorReputation } from "@/lib/reputation";
+import { computePoolStats } from "@/lib/pool-stats";
 import type { EnrichedVideo, VideoData } from "@/lib/types";
 import { formatNumber } from "@/lib/formatters";
 
@@ -166,18 +167,55 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
     fetchMarketVolatility().then(setMarketVol).catch(() => {});
   }, []);
 
-  // Comment sentiment (YouTube only for now — other platforms lack public comment APIs)
+  // Comment sentiment — runs on every supported platform:
+  //   YouTube / YT Shorts → YT Data API
+  //   TikTok              → Apify tiktok-comments-scraper
+  //   Instagram           → Apify instagram-comment-scraper
+  //   X (Twitter)         → Apify tweet-scraper with conversation_id filter
+  // Each fetches public top comments, then feeds them into the
+  // platform-agnostic /api/forecast/sentiment Gemini classifier.
   const [sentimentScore, setSentimentScore] = useState<number | undefined>(undefined);
   const [sentimentRationale, setSentimentRationale] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (platform !== "youtube" && platform !== "youtube_short") return;
     if (!video.id) return;
 
-    // Fetch comments, then sentiment
+    // Resolve the comments endpoint + query per platform.
+    let commentsUrl: string | null = null;
+    if (platform === "youtube" || platform === "youtube_short") {
+      commentsUrl = `/api/youtube/comments?videoId=${encodeURIComponent(video.id)}&max=20`;
+    } else if (platform === "tiktok") {
+      // TikTok post URL: https://www.tiktok.com/@<handle>/video/<id>
+      const handle = (video.channel || "").replace(/^@/, "");
+      if (handle && video.id) {
+        const postUrl = `https://www.tiktok.com/@${handle}/video/${video.id}`;
+        commentsUrl = `/api/tiktok/comments?url=${encodeURIComponent(postUrl)}&max=20`;
+      }
+    } else if (platform === "instagram") {
+      // IG Reel URL: https://www.instagram.com/reel/<shortcode>/
+      // video.id holds the shortcode for IG scraped posts.
+      if (video.id) {
+        const postUrl = `https://www.instagram.com/reel/${video.id}/`;
+        commentsUrl = `/api/instagram/comments?url=${encodeURIComponent(postUrl)}&max=20`;
+      }
+    } else if (platform === "x") {
+      // For X, video.id is the numeric tweet ID. The author handle is stored
+      // on channelId by x-adapter (channel = display name, channelId = @handle).
+      const authorHandle = (video.channelId || "").replace(/^@/, "");
+      if (/^\d+$/.test(video.id)) {
+        const qs = new URLSearchParams({
+          tweetId:       video.id,
+          authorHandle,
+          max:           "20",
+        });
+        commentsUrl = `/api/x/comments?${qs.toString()}`;
+      }
+    }
+    if (!commentsUrl) return;
+
     (async () => {
       try {
-        const cRes = await fetch(`/api/youtube/comments?videoId=${encodeURIComponent(video.id)}&max=20`);
+        const cRes = await fetch(commentsUrl!);
         if (!cRes.ok) return;
         const cData = await cRes.json();
         if (!cData?.ok || !Array.isArray(cData.comments) || cData.comments.length === 0) return;
@@ -195,7 +233,7 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
         }
       } catch { /* silent fail */ }
     })();
-  }, [video.id, platform]);
+  }, [video.id, video.channel, video.channelId, platform]);
 
   // Combine into single multiplier
   const seasonality = useMemo(
@@ -213,31 +251,39 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   const reputation = useMemo(() => assessCreatorReputation({ creatorHistory }), [creatorHistory]);
 
   // Pool coverage — count of reference-store entries per platform, used by the
-  // V1 footer's "Reference pool" column. Fetches once on mount, no re-fetch
-  // per video; the pool is a global asset.
+  // right-rail "Pool coverage" column. Uses the shared computePoolStats()
+  // bucketer so counts always match the Sidebar + Landing page panel. Re-
+  // fetches on the global `ve:pool-updated` event so the counts stay live
+  // when the user bulk-imports or analyzes a new URL.
   const [poolCoverage, setPoolCoverage] = useState<PoolCoverageEntry[]>([]);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    fetch("/api/reference-store")
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        const entries = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
-        const counts: Record<Platform, number> = {
-          youtube: 0, youtube_short: 0, tiktok: 0, instagram: 0, x: 0,
-        };
-        for (const e of entries) {
-          const p = e?.platform as Platform | undefined;
-          if (p && p in counts) counts[p] += 1;
-        }
-        setPoolCoverage([
-          { platform: "youtube",       label: "YouTube LF",  count: counts.youtube,       color: platformTint.youtube.color },
-          { platform: "youtube_short", label: "Shorts",      count: counts.youtube_short, color: platformTint.youtube_short.color },
-          { platform: "tiktok",        label: "TikTok",      count: counts.tiktok,        color: platformTint.tiktok.color },
-          { platform: "instagram",     label: "Reels",       count: counts.instagram,     color: platformTint.instagram.color },
-          { platform: "x",             label: "X",           count: counts.x,             color: platformTint.x.color },
-        ]);
-      })
-      .catch(() => {});
+    let cancelled = false;
+    const load = () => {
+      fetch("/api/reference-store")
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (cancelled) return;
+          const entries = Array.isArray(d?.entries) ? d.entries : Array.isArray(d) ? d : [];
+          const stats = computePoolStats(entries);
+          const rowByPlatform = new Map(stats.rows.map(r => [r.id, r.count] as const));
+          setPoolCoverage([
+            { platform: "youtube",       label: "YouTube LF",  count: rowByPlatform.get("youtube")       ?? 0, color: platformTint.youtube.color },
+            { platform: "youtube_short", label: "Shorts",      count: rowByPlatform.get("youtube_short") ?? 0, color: platformTint.youtube_short.color },
+            { platform: "tiktok",        label: "TikTok",      count: rowByPlatform.get("tiktok")        ?? 0, color: platformTint.tiktok.color },
+            { platform: "instagram",     label: "Reels",       count: rowByPlatform.get("instagram")     ?? 0, color: platformTint.instagram.color },
+            { platform: "x",             label: "X",           count: rowByPlatform.get("x")             ?? 0, color: platformTint.x.color },
+          ]);
+        })
+        .catch(() => {});
+    };
+    load();
+    const onUpdate = () => load();
+    window.addEventListener("ve:pool-updated", onUpdate);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ve:pool-updated", onUpdate);
+    };
   }, []);
 
   // Tuning overrides from admin page — applied on every forecast
@@ -280,6 +326,8 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
   //   2. Memory: last-known values per (creator-handle, platform) are stored
   //      in KV and pre-fill on the next forecast for the same creator.
   const [ocrStatus, setOcrStatus] = useState<{ kind: "working" | "done" | "error"; message: string } | null>(null);
+  // Bulk CSV import status — TikTok Studio / Meta Business Suite exports.
+  const [csvStatus, setCsvStatus] = useState<{ kind: "working" | "done" | "error"; message: string } | null>(null);
 
   const ingestImage = useCallback(async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -330,6 +378,60 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
       setOcrStatus({ kind: "error", message: e instanceof Error ? e.message : "Network error." });
     }
   }, []);
+
+  // CSV bulk import — TikTok Studio or Meta Business Suite export. Each row
+  // is a post; the endpoint aggregates into creator-level mean/median values
+  // and persists to `creator-analytics:<platform>:<handle>` memory. Returns
+  // the aggregated fields, which we also pre-fill into manualInputs so the
+  // forecast reflects the new data immediately.
+  const ingestCsv = useCallback(async (file: File) => {
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith(".csv") && !file.type.includes("csv") && !file.type.includes("text")) {
+      setCsvStatus({ kind: "error", message: "Not a CSV file." });
+      return;
+    }
+    if (platform !== "tiktok" && platform !== "instagram") {
+      setCsvStatus({ kind: "error", message: "CSV import only available for TikTok and Instagram." });
+      return;
+    }
+    const handle = (video.channel || "").trim();
+    if (!handle) {
+      setCsvStatus({ kind: "error", message: "Creator handle unknown — cannot save." });
+      return;
+    }
+    setCsvStatus({ kind: "working", message: `Parsing ${file.name}…` });
+    try {
+      const fd = new FormData();
+      fd.append("platform", platform);
+      fd.append("handle", handle);
+      fd.append("file", file);
+      const res = await fetch("/api/analytics/csv-import", { method: "POST", body: fd });
+      const data = await res.json().catch(() => null);
+      if (!data?.ok) {
+        const reason = data?.reason ?? "parse_failed";
+        const hint   = typeof data?.hint === "string" ? ` · ${data.hint}` : "";
+        setCsvStatus({ kind: "error", message: `${reason}${hint}` });
+        return;
+      }
+      const aggregated = (data.aggregated ?? {}) as Partial<ManualInputs>;
+      const numericOnly: Partial<ManualInputs> = {};
+      for (const [k, v] of Object.entries(aggregated)) {
+        if (typeof v === "number" && Number.isFinite(v)) {
+          (numericOnly as Record<string, number>)[k] = v;
+        }
+      }
+      setManualInputs(prev => ({ ...prev, ...numericOnly }));
+      setInputsOpen(true);
+      const fieldCount = Object.keys(numericOnly).length;
+      const rows       = typeof data.rowsParsed === "number" ? data.rowsParsed : 0;
+      setCsvStatus({
+        kind: "done",
+        message: `Imported ${rows} rows · filled ${fieldCount} field${fieldCount === 1 ? "" : "s"} · saved to creator memory.`,
+      });
+    } catch (e) {
+      setCsvStatus({ kind: "error", message: e instanceof Error ? e.message : "Network error." });
+    }
+  }, [platform, video.channel]);
 
   // Window-level paste handler so RMs can Ctrl+V a screenshot straight from
   // their clipboard. Only active while the analytics form is expanded — off
@@ -525,7 +627,7 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
 
   // "How we got here" signal list for the footer. Derived from the real
   // forecast result, not hard-coded.
-  const signals = buildSignals(result, reputation.multiplier);
+  const signals = buildSignals(result, reputation.multiplier, sentimentScore, sentimentRationale);
 
   return (
     <div style={panelStyle}>
@@ -633,6 +735,11 @@ export default function ForecastPanel({ video, creatorHistory, platform }: Forec
             These fields are not available via any public API. Pull them from the creator&apos;s own analytics dashboard. Forecast recalculates as you type.
           </div>
           <ScreenshotIngest onFile={ingestImage} status={ocrStatus} />
+          {(platform === "tiktok" || platform === "instagram") && (
+            <div style={{ marginTop: 10 }}>
+              <CsvIngest platform={platform} onFile={ingestCsv} status={csvStatus} />
+            </div>
+          )}
           {thumbnailCTR && aiEstimatedKeys.has("ytCTRpct") && (
             <div style={{ ...aiBadgeStyle, borderColor: "rgba(127,176,212,0.24)", background: "rgba(127,176,212,0.06)", marginTop: 10 }}>
               <span style={{ color: tokens.sky }}>AI thumbnail score:</span>{" "}
@@ -1128,6 +1235,79 @@ function ScreenshotIngest({
   );
 }
 
+// Bulk CSV import component — TikTok Studio or Meta Business Suite export.
+// Shown only for TT / IG. One upload aggregates every post in the CSV into
+// creator-level mean/median ManualInputs values and persists to memory.
+function CsvIngest({
+  platform,
+  onFile,
+  status,
+}: {
+  platform: "tiktok" | "instagram";
+  onFile: (file: File) => void;
+  status: { kind: "working" | "done" | "error"; message: string } | null;
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const statusColor =
+    status?.kind === "done"    ? "#2ECC8A" :
+    status?.kind === "error"   ? "#FF6B7A" :
+    status?.kind === "working" ? "#60A5FA" :
+                                 "#8A8883";
+
+  const sourceLabel = platform === "tiktok"
+    ? "TikTok Studio → Analytics → Video → Download"
+    : "Meta Business Suite → Content → Export";
+  const expectedCols = platform === "tiktok"
+    ? "Watched full video · Completion rate · Rewatch rate · FYP traffic"
+    : "Saves · Shares / Sends · Reach · 3-second plays";
+
+  return (
+    <div style={{
+      background: "rgba(106,195,180,0.06)", border: "1px dashed rgba(106,195,180,0.35)",
+      borderRadius: 8, padding: 12,
+    }}>
+      <div className="flex items-center gap-3" style={{ flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          style={{
+            background: "rgba(106,195,180,0.14)", border: "1px solid rgba(106,195,180,0.4)",
+            color: "#B3E8DE", padding: "6px 12px", borderRadius: 6, fontSize: 12,
+            fontWeight: 500, cursor: "pointer",
+          }}
+        >
+          Import analytics CSV
+        </button>
+        <div style={{ fontSize: 11.5, color: "#8A8883", lineHeight: 1.5, flex: 1, minWidth: 200 }}>
+          Export from {" "}
+          <span style={{ fontFamily: "IBM Plex Mono, monospace", color: "#B8B6B1" }}>{sourceLabel}</span>.
+          Aggregates every row in one pass → fills analytics fields below and saves to this creator&apos;s memory.
+        </div>
+      </div>
+      <div style={{ fontSize: 10.5, color: "#6B6964", marginTop: 6, fontFamily: "IBM Plex Mono, monospace" }}>
+        expected columns: {expectedCols}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv,text/csv"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          e.target.value = "";
+        }}
+      />
+      {status && (
+        <div style={{ fontSize: 11.5, color: statusColor, marginTop: 8, lineHeight: 1.55 }}>
+          {status.kind === "working" ? "⋯ " : status.kind === "done" ? "✓ " : "✕ "}
+          {status.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InputRow({ fieldKey, label, value, onChange, suffix }: { fieldKey: string; label: string; value?: string; onChange: (v: string) => void; suffix?: string }) {
   const tooltip = INPUT_TOOLTIPS[fieldKey];
   return (
@@ -1477,8 +1657,10 @@ function tierDisplay(
 // Build the "How we got here" signal list from the real forecast result.
 // Returns at most 4 k/v pairs to keep the footer clean.
 function buildSignals(
-  result:   ReturnType<typeof forecast>,
-  repMult:  number,
+  result:    ReturnType<typeof forecast>,
+  repMult:   number,
+  sentScore?: number,
+  sentRationale?: string,
 ): Array<{ k: string; v: string; sub?: string; tone: "pos" | "neg" | "neutral" }> {
   const out: Array<{ k: string; v: string; sub?: string; tone: "pos" | "neg" | "neutral" }> = [];
   out.push({
@@ -1493,6 +1675,25 @@ function buildSignals(
       v:    `×${repMult.toFixed(2)}`,
       sub:  "vs creator median",
       tone: repMult > 1.02 ? "pos" : repMult < 0.98 ? "neg" : "neutral",
+    });
+  }
+  // Comment sentiment — forecast() widens the upside band when positive,
+  // compresses it when negative (sentimentUpside = 0.7 + score/100 * 0.65).
+  // Surface the score + short rationale so the RM sees the adjustment.
+  if (typeof sentScore === "number" && Number.isFinite(sentScore)) {
+    const band =
+      sentScore >= 80 ? "strong-positive" :
+      sentScore >= 60 ? "positive" :
+      sentScore >= 40 ? "neutral" :
+      sentScore >= 25 ? "mixed" :
+                         "negative";
+    out.push({
+      k:    "Sentiment",
+      v:    `${Math.round(sentScore)}/100`,
+      sub:  sentRationale && sentRationale.length > 0
+              ? sentRationale.length > 60 ? `${sentRationale.slice(0, 57)}…` : sentRationale
+              : band,
+      tone: sentScore >= 60 ? "pos" : sentScore < 40 ? "neg" : "neutral",
     });
   }
   if (result.trajectory) {

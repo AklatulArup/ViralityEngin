@@ -8,6 +8,8 @@ import { kvSet, kvListPush, kvSetAdd, kvListRange, kvGet, isKvAvailable } from "
 import type { ForecastSnapshot } from "@/lib/forecast-learning";
 
 export const runtime = "nodejs";
+// Reads searchParams + KV at request time — must be dynamic.
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {

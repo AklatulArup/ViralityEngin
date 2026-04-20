@@ -49,7 +49,8 @@ import type {
 } from "@/lib/types";
 import { MODES } from "@/lib/modes";
 import { parseInput } from "@/lib/url-parser";
-import { runVRS, runTRS } from "@/lib/vrs";
+import { runPlatformVRS } from "@/lib/vrs";
+import type { Platform } from "@/lib/forecast";
 import { daysAgo, velocity, engagement, formatNumber } from "@/lib/formatters";
 import {
   GLOBAL_BASELINE,
@@ -108,14 +109,19 @@ type InputTab = "youtube" | "youtube_short" | "tiktok" | "instagram" | "x";
 function enrichVideo(
   v: VideoData,
   median: number,
-  platform: "youtube" | "tiktok" = "youtube"
+  platform: Platform = "youtube"
 ): EnrichedVideo {
   const days = daysAgo(v.publishedAt);
   const vel = velocity(v.views, days);
   const eng = engagement(v.likes, v.comments, v.views);
-  const vrs = platform === "tiktok" ? runTRS(v) : runVRS(v);
+  // Stamp platform on the video if the scraper didn't already, then let
+  // runPlatformVRS auto-route to the correct criteria set. This replaces the
+  // old `platform === "tiktok" ? runTRS : runVRS` binary, which forced IG,
+  // YT Shorts, and X through YouTube long-form scoring by default.
+  const videoWithPlatform: VideoData = v.platform ? v : { ...v, platform };
+  const vrs = runPlatformVRS(videoWithPlatform);
   return {
-    ...v,
+    ...videoWithPlatform,
     days,
     velocity: vel,
     engagement: eng,
@@ -816,6 +822,20 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
           const videoResult: VideoAnalysis = { type: "video", video: v, channel: ttChannel, channelMedian: v.views, recentVideos: [v], deepAnalysis: deepSingle, referenceContext: relatedEntries };
           setResult(videoResult);
           setLanguageCPA(computeLanguageCPA([v]));
+          // Single-video analyze must still grow the pool — previously this
+          // branch skipped the poolWrite (only the batch/else branch wrote).
+          // Result: pasting a single TikTok URL left TTK pool count unchanged.
+          const ttSingleEntries: ReferenceEntry[] = enriched.map((x) => buildEntryFromVideo(x, "tiktok"));
+          if (ttSingleEntries.length > 0) {
+            poolWrite("/api/reference-store", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(ttSingleEntries),
+            })
+              .then((r) => r.json())
+              .then(() => { setRefStoreStatus("saved"); refreshReferenceStore(); })
+              .catch(() => {});
+          }
         } else {
           const topPerformers = enriched.slice(0, 10);
           const creatorMap: Record<string, { views: number[]; scores: number[] }> = {};
@@ -869,8 +889,11 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
 
         const medianIG = calculateMedian(igVideos.map((v) => v.views));
         setStatus("Computing scores...");
-        const enrichedIG = igVideos.map((v) => enrichVideo(v, medianIG, "tiktok")).sort((a, b) => b.views - a.views);
-        const igRelated = referenceStore ? referenceStore.entries.filter((e) => e.platform === "tiktok") : [];
+        // enrichVideo + computeDeepAnalysis both accept the full Platform type
+        // now, so IG posts get runIRS (Instagram-specific VRS) routing and
+        // IG-labeled recommendations / insights instead of the old TikTok reuse.
+        const enrichedIG = igVideos.map((v) => enrichVideo(v, medianIG, "instagram")).sort((a, b) => b.views - a.views);
+        const igRelated = referenceStore ? referenceStore.entries.filter((e) => e.platform === "instagram") : [];
 
         // Single post/reel URL → promote to VideoAnalysis (same rich display as YouTube)
         const isIgSingle = (parsed.url?.includes("/reel/") || parsed.url?.includes("/p/")) && enrichedIG.length === 1;
@@ -885,7 +908,7 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
             uploads: null,
             avatar: "",
           };
-          const igDeepSingle = computeDeepAnalysis([v], null, igRelated, "tiktok");
+          const igDeepSingle = computeDeepAnalysis([v], null, igRelated, "instagram");
           const igVideoResult: VideoAnalysis = { type: "video", video: v, channel: igChannel, channelMedian: v.views, recentVideos: [v], deepAnalysis: igDeepSingle, referenceContext: igRelated };
           setResult(igVideoResult);
           setLanguageCPA(computeLanguageCPA([v]));
@@ -906,7 +929,7 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
               avgScore: Math.round(data.scores.reduce((s, v) => s + v, 0) / data.scores.length),
             }))
             .sort((a, b) => b.avgViews - a.avgViews);
-          const igDeep = computeDeepAnalysis(enrichedIG, null, igRelated, "tiktok");
+          const igDeep = computeDeepAnalysis(enrichedIG, null, igRelated, "instagram");
           const igBatch: TikTokBatchAnalysis = { type: "tiktok-batch", videos: enrichedIG, deepAnalysis: igDeep, topPerformers: igTopPerformers, competitorBreakdown: igBreakdown, referenceContext: igRelated };
           setResult(igBatch);
           setLanguageCPA(computeLanguageCPA(enrichedIG));
@@ -2131,49 +2154,81 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
                         })}
                       </div>
 
-                      {/* ── Pool composition — horizontal stacked bar by platform ── */}
+                      {/* ── Platform readiness grid — one dense row per platform,
+                          progress bar toward the NEXT unmet milestone (min/std/mat).
+                          Replaces the old stacked composition strip whose legend
+                          collapsed onto the total when one platform dominated. */}
                       {grand.current > 0 && (
                         <div className="mb-5" style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.04)" }}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="font-mono" style={{ fontSize: 9, color: "#6B6964", letterSpacing: "0.08em", textTransform: "uppercase" }}>Pool composition</div>
-                            <div className="font-mono" style={{ fontSize: 9, color: "#5E5A57" }}>by platform</div>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="font-mono" style={{ fontSize: 9, color: "#6B6964", letterSpacing: "0.08em", textTransform: "uppercase" }}>Platform readiness</div>
+                            <div className="font-mono" style={{ fontSize: 9, color: "#5E5A57" }}>progress to next tier</div>
                           </div>
-                          {/* Single stacked horizontal bar */}
-                          <div className="flex" style={{
-                            width: "100%", height: 10, borderRadius: 5, overflow: "hidden",
-                            background: "rgba(255,255,255,0.03)", marginBottom: 10,
-                          }}>
-                            {TIERS.map((t) => {
-                              const pct = (counts[t.key] / grand.current) * 100;
-                              if (pct === 0) return null;
-                              return (
-                                <div
-                                  key={t.key}
-                                  title={`${t.label}: ${counts[t.key].toLocaleString()} items (${pct.toFixed(1)}%)`}
-                                  style={{
-                                    width: `${pct}%`,
-                                    background: t.color,
-                                    boxShadow: `inset 0 0 6px ${t.color}88`,
-                                    transition: "width 0.7s cubic-bezier(0.16,1,0.3,1)",
-                                  }}
-                                />
-                              );
-                            })}
-                          </div>
-                          {/* Legend */}
-                          <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                          <div className="flex" style={{ flexDirection: "column", gap: 8 }}>
                             {TIERS.map((t) => {
                               const c = counts[t.key];
-                              const pct = grand.current > 0 ? (c / grand.current) * 100 : 0;
+                              const nextTier =
+                                c < t.min ? { name: "min",  target: t.min, color: "#F59E0B" } :
+                                c < t.std ? { name: "std",  target: t.std, color: "#60A5FA" } :
+                                c < t.mat ? { name: "mat",  target: t.mat, color: "#2ECC8A" } :
+                                            { name: "mat",  target: t.mat, color: "#2ECC8A" };
+                              const done = c >= t.mat;
+                              const pct  = Math.min(100, (c / nextTier.target) * 100);
+                              const statusLabel =
+                                done       ? "mature"   :
+                                c >= t.std ? "standard" :
+                                c >= t.min ? "workable" :
+                                c > 0      ? "below min" :
+                                             "empty";
+                              const statusColor =
+                                done       ? "#2ECC8A" :
+                                c >= t.std ? "#60A5FA" :
+                                c >= t.min ? "#F59E0B" :
+                                c > 0      ? "#F59E0B" :
+                                             "#5E5A57";
                               return (
-                                <div key={t.key} className="flex items-center justify-between" style={{ opacity: c === 0 ? 0.4 : 1 }}>
-                                  <div className="flex items-center gap-1.5">
+                                <div key={t.key} style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "80px 68px 1fr 92px",
+                                  alignItems: "center",
+                                  columnGap: 12,
+                                  opacity: c === 0 ? 0.55 : 1,
+                                }}>
+                                  {/* Platform */}
+                                  <div className="flex items-center gap-1.5" style={{ minWidth: 0 }}>
                                     <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.color, display: "inline-block", flexShrink: 0, boxShadow: c > 0 ? `0 0 4px ${t.color}80` : "none" }} />
-                                    <span className="font-mono" style={{ fontSize: 10, color: c === 0 ? "#5E5A57" : "#B8B6B1" }}>{t.short}</span>
+                                    <span className="font-mono" style={{ fontSize: 10.5, color: c === 0 ? "#5E5A57" : "#B8B6B1", fontWeight: 500 }}>{t.short}</span>
                                   </div>
-                                  <div className="flex items-baseline gap-1">
-                                    <span className="font-mono" style={{ fontSize: 10, color: c === 0 ? "#5E5A57" : "#E8E6E1", fontWeight: 500 }}>{pct.toFixed(1)}%</span>
-                                    <span className="font-mono" style={{ fontSize: 8.5, color: "#5E5A57" }}>{c.toLocaleString()}</span>
+                                  {/* Count */}
+                                  <div className="font-mono" style={{ fontSize: 10.5, color: c === 0 ? "#5E5A57" : "#E8E6E1", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                                    {c.toLocaleString()}
+                                  </div>
+                                  {/* Progress bar */}
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <div className="signal-bar" style={{ height: 4, flex: 1 }}>
+                                      <div className="signal-bar-fill" style={{
+                                        width: `${pct}%`,
+                                        background: c === 0 ? "#3A3835" : `linear-gradient(90deg, ${nextTier.color}66, ${nextTier.color})`,
+                                        boxShadow: c > 0 ? `0 0 6px ${nextTier.color}55` : "none",
+                                        transition: "width 0.7s cubic-bezier(0.16,1,0.3,1)",
+                                      }} />
+                                    </div>
+                                    <span className="font-mono" style={{ fontSize: 9, color: "#5E5A57", fontVariantNumeric: "tabular-nums", minWidth: 60, textAlign: "right" }}>
+                                      {done ? `${t.mat.toLocaleString()}/${t.mat.toLocaleString()}` : `${c.toLocaleString()}/${nextTier.target.toLocaleString()}`}
+                                    </span>
+                                  </div>
+                                  {/* Status pill */}
+                                  <div style={{ textAlign: "right" }}>
+                                    <span className="font-mono" style={{
+                                      fontSize: 9, letterSpacing: "0.04em",
+                                      padding: "2px 8px", borderRadius: 99,
+                                      background: `${statusColor}14`,
+                                      border: `1px solid ${statusColor}33`,
+                                      color: statusColor,
+                                      textTransform: "uppercase",
+                                    }}>
+                                      {done ? `✓ ${statusLabel}` : statusLabel}
+                                    </span>
                                   </div>
                                 </div>
                               );

@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { fetchChannel } from "@/lib/youtube";
 
+// Reads `id` from request.url query — cannot be statically rendered.
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id");
   if (!id) {
