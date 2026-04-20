@@ -207,17 +207,13 @@ export const PLATFORM_CONFIG: Record<Platform, {
   youtube: {
     label: "YouTube Long-Form",
     horizonDays: 365,
-    // Evergreen: steady accumulation via search + suggested, tapers slowly
-    cumulativeShare: (d) => {
-      if (d <= 0)    return 0.001;
-      if (d <= 2)    return 0.12;
-      if (d <= 7)    return 0.28;
-      if (d <= 30)   return 0.48;
-      if (d <= 90)   return 0.65;
-      if (d <= 180)  return 0.78;
-      if (d <= 365)  return 1.00;
-      return 1.0;
-    },
+    // Evergreen: steady accumulation via search + suggested, tapers slowly.
+    // Knot points; linear interp between them so the Custom Date Projection
+    // actually moves when the user changes the target by a day.
+    cumulativeShare: (d) => lerpShare(d, [
+      [0,   0.001], [2,   0.12], [7,   0.28], [30,  0.48],
+      [90,  0.65],  [180, 0.78], [365, 1.00],
+    ]),
     minBaselinePosts: 5,
     upsideMultiplier: 8,    // top video can reach 8× creator median
     downsideMultiplier: 0.15,
@@ -227,14 +223,9 @@ export const PLATFORM_CONFIG: Record<Platform, {
     label: "YouTube Shorts",
     horizonDays: 90,
     // No 48h cap; search extends, but main push is first 2 weeks
-    cumulativeShare: (d) => {
-      if (d <= 0)    return 0.001;
-      if (d <= 1)    return 0.18;
-      if (d <= 7)    return 0.48;
-      if (d <= 30)   return 0.78;
-      if (d <= 90)   return 1.00;
-      return 1.0;
-    },
+    cumulativeShare: (d) => lerpShare(d, [
+      [0, 0.001], [1, 0.18], [7, 0.48], [30, 0.78], [90, 1.00],
+    ]),
     minBaselinePosts: 8,
     upsideMultiplier: 15,   // high variance on Shorts
     downsideMultiplier: 0.10,
@@ -244,15 +235,9 @@ export const PLATFORM_CONFIG: Record<Platform, {
     label: "TikTok",
     horizonDays: 30,
     // Aggressive early decay, 70% completion gate now makes mid-tail steeper
-    cumulativeShare: (d) => {
-      if (d <= 0)    return 0.001;
-      if (d <= 1)    return 0.35;
-      if (d <= 3)    return 0.60;
-      if (d <= 7)    return 0.82;
-      if (d <= 14)   return 0.93;
-      if (d <= 30)   return 1.00;
-      return 1.0;
-    },
+    cumulativeShare: (d) => lerpShare(d, [
+      [0, 0.001], [1, 0.35], [3, 0.60], [7, 0.82], [14, 0.93], [30, 1.00],
+    ]),
     minBaselinePosts: 10,
     upsideMultiplier: 20,   // interest graph = highest variance
     downsideMultiplier: 0.08,
@@ -262,15 +247,9 @@ export const PLATFORM_CONFIG: Record<Platform, {
     label: "Instagram Reels",
     horizonDays: 35,
     // Audition phase then save-extended tail
-    cumulativeShare: (d) => {
-      if (d <= 0)    return 0.001;
-      if (d <= 1)    return 0.33;
-      if (d <= 3)    return 0.57;
-      if (d <= 7)    return 0.77;
-      if (d <= 14)   return 0.92;
-      if (d <= 35)   return 1.00;
-      return 1.0;
-    },
+    cumulativeShare: (d) => lerpShare(d, [
+      [0, 0.001], [1, 0.33], [3, 0.57], [7, 0.77], [14, 0.92], [35, 1.00],
+    ]),
     minBaselinePosts: 8,
     upsideMultiplier: 12,
     downsideMultiplier: 0.10,
@@ -280,15 +259,9 @@ export const PLATFORM_CONFIG: Record<Platform, {
     label: "X (Twitter)",
     horizonDays: 3,
     // 6-hour half-life; ~95% of reach in 24h
-    cumulativeShare: (d) => {
-      if (d <= 0)      return 0.001;
-      if (d <= 0.25)   return 0.35;  // 6h
-      if (d <= 0.5)    return 0.60;  // 12h
-      if (d <= 1)      return 0.82;  // 24h
-      if (d <= 2)      return 0.93;
-      if (d <= 3)      return 1.00;
-      return 1.0;
-    },
+    cumulativeShare: (d) => lerpShare(d, [
+      [0, 0.001], [0.25, 0.35], [0.5, 0.60], [1, 0.82], [2, 0.93], [3, 1.00],
+    ]),
     minBaselinePosts: 15,  // X needs more history due to per-post variance
     upsideMultiplier: 25,  // highest — single viral X post can be 50× median
     downsideMultiplier: 0.05,
@@ -371,6 +344,31 @@ export function projectAtDate(
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Linear interpolation between cumulative-share knot points.
+ * Input `knots` must be sorted by day ascending and in range [0, 1] for share.
+ * Outside the knot range, returns the first/last knot value (flat extrapolation).
+ *
+ * This replaces the previous step-function cumulativeShare, which caused the
+ * Custom Date Projection to freeze the view counts whenever two target dates
+ * happened to fall in the same hard band (e.g. day 31 and day 32 both
+ * returning share=0.65 for YouTube).
+ */
+function lerpShare(d: number, knots: Array<readonly [number, number]>): number {
+  if (knots.length === 0) return 0;
+  if (d <= knots[0][0])             return knots[0][1];
+  if (d >= knots[knots.length-1][0]) return knots[knots.length-1][1];
+  for (let i = 1; i < knots.length; i++) {
+    const [x0, y0] = knots[i-1];
+    const [x1, y1] = knots[i];
+    if (d <= x1) {
+      const t = (d - x0) / (x1 - x0);
+      return y0 + t * (y1 - y0);
+    }
+  }
+  return knots[knots.length-1][1];
+}
 
 function median(arr: number[]): number {
   if (arr.length === 0) return 0;
