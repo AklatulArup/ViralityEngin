@@ -70,6 +70,7 @@ import { expandKeywordBank } from "@/lib/keyword-bank";
 import { totalKeywords } from "@/lib/keyword-stats";
 import { computePoolStats, bucketOf, type MinimalEntry as MinimalPoolEntry } from "@/lib/pool-stats";
 import { fmtCount } from "@/lib/number-format";
+import { humanizeError } from "@/lib/humanize-errors";
 import { PoolCoveragePanel } from "./shell/PoolCoveragePanel";
 import { findAdjacentVideos } from "@/lib/adjacent-videos";
 import { computeNicheRanking } from "@/lib/niche-ranking";
@@ -210,12 +211,21 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
   //     calls analyze() directly. The analyzeRef keeps the listener calling
   //     the latest `analyze` closure without reinstalling on every render.
   const analyzeRef = useRef<(url: string) => Promise<void>>(async () => {});
+  // React strict mode runs effects twice in dev (mount → cleanup → mount).
+  // Without this guard, the first run reads+removes the sessionStorage value
+  // and schedules a setTimeout; the cleanup then cancels the timer; the
+  // second run finds empty storage and aborts. Net effect: analyze never
+  // runs in dev. Production (single-invocation) was unaffected, but the
+  // guard makes both environments behave identically.
+  const coldMountConsumed = useRef(false);
 
   // Path A: cold mount
   useEffect(() => {
     if (!headless || typeof window === "undefined") return;
+    if (coldMountConsumed.current) return;
     const raw = window.sessionStorage.getItem("ve_pending_analyze");
     if (!raw) return;
+    coldMountConsumed.current = true;
     window.sessionStorage.removeItem("ve_pending_analyze");
     // Format: JSON { url, ts } — with a 10s staleness guard so a user who
     // navigated away and came back doesn't re-trigger an old analyze. Also
@@ -236,13 +246,26 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
     // Previously: `.catch(() => {})` silently swallowed analyze failures
     // so a missing API key / broken scraper would leave the user staring
     // at an empty forecast screen with no feedback. Now surface the error
-    // into the dashboard's status bar (red) so it's visible.
-    const t = setTimeout(() => {
+    // into the dashboard's status bar (red) so it's visible. The raw
+    // message is routed through humanizeError() which pattern-matches
+    // known upstream failures (Apify 402 credit exhaustion, bad token,
+    // rate limits, timeouts, YT quota, etc.) into plain-English guidance;
+    // unrecognised errors pass through unchanged.
+    // No cleanup-return here — in React strict-mode dev, a cleanup that
+    // cancels the timer would race with coldMountConsumed and block the
+    // analyze entirely. The ref guard above already prevents double-
+    // scheduling on the second strict-mode run, and there's no "stale"
+    // timer risk because Dashboard only unmounts on route change (at
+    // which point the user has navigated away anyway).
+    setTimeout(() => {
       analyzeRef.current(pending!).catch(err => {
-        setError(err instanceof Error ? err.message : "Analyze failed — unknown error");
+        const h = humanizeError(err);
+        setError(h.message);
+        // Preserve the raw upstream detail in the browser console for
+        // debugging — the cleaned message is what the RM sees.
+        if (h.raw && h.raw !== h.message) console.error("[analyze]", h.raw);
       });
     }, 0);
-    return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headless]);
 
@@ -256,9 +279,12 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
         // if a remount happens right after.
         window.sessionStorage.removeItem("ve_pending_analyze");
         // Same error visibility fix as the cold-mount path — surface failures
-        // to the red error banner instead of silently swallowing them.
+        // to the red error banner, cleaned up by humanizeError for common
+        // upstream patterns (Apify 402, bad token, timeouts, YT quota, etc.).
         analyzeRef.current(detail.url).catch(err => {
-          setError(err instanceof Error ? err.message : "Analyze failed — unknown error");
+          const h = humanizeError(err);
+          setError(h.message);
+          if (h.raw && h.raw !== h.message) console.error("[analyze]", h.raw);
         });
       }
     };
@@ -442,7 +468,12 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
 
       setStatus("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      // Same humanize treatment as the main analyze catch — so secondary
+      // flows (bulk upload, retry, etc.) produce the same clean error
+      // message instead of raw stack traces or JSON.
+      const h = humanizeError(e);
+      setError(h.message);
+      if (h.raw && h.raw !== h.message) console.error("[analyze]", h.raw);
       setStatus("");
     }
 
@@ -1026,7 +1057,12 @@ export default function Dashboard({ headless = false }: DashboardProps = {}) {
         throw new Error(`${parsed.label} — paste a YouTube, TikTok, Instagram, or X URL.`);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      // Route through humanizeError so common upstream failures
+      // (Apify 402, missing API key, timeouts, YT quota, etc.) render
+      // as plain-English guidance instead of raw JSON in the banner.
+      const h = humanizeError(e);
+      setError(h.message);
+      if (h.raw && h.raw !== h.message) console.error("[analyze]", h.raw);
       setStatus("");
     }
 
